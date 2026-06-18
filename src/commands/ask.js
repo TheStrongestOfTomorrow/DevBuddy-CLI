@@ -2,6 +2,7 @@
 
 import { completeWithRetry, isOnboarded, isAuthenticated, warnRateLimit, getActiveProvider, getActiveModel } from "../ai/providers.js";
 import { loadConfig } from "../store.js";
+import { systemPromptSuffix, findDevbuddyMd } from "../prompt.js";
 import * as ui from "../ui.js";
 
 function requireOnboarding() {
@@ -40,10 +41,14 @@ export function register(program) {
       warnRateLimit();
 
       const cfg = loadConfig();
+      const dbMd = findDevbuddyMd();
       const system =
         opts.system ||
         `You are a helpful, concise developer assistant. Answer in ${cfg.language}. ` +
-        `Prefer clear explanations over long essays. Use code blocks when useful.`;
+        `Prefer clear explanations over long essays. Use code blocks when useful.` +
+        systemPromptSuffix();
+
+      if (dbMd) ui.muted(`using project context: ${dbMd.path}`);
 
       const spinner = new ui.Spinner("Thinking");
       spinner.start();
@@ -61,6 +66,7 @@ export function register(program) {
             question,
             provider: getActiveProvider().id,
             model: opts.model || getActiveModel(),
+            context: dbMd ? dbMd.path : null,
             answer,
           });
           return;
@@ -75,3 +81,4 @@ export function register(program) {
       }
     });
 }
+

@@ -5,6 +5,74 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] — 2026-06-18
+
+### Added
+
+- **Multi-message chat** (`devbuddy chat`). Interactive REPL with persistent storage. Features:
+  - Global chats at `~/.devbuddy/chats/<id>.json`
+  - Project-scoped chats at `./.devbuddy/chats/<id>.json` (use `--project`)
+  - Resume with `--continue` or `--chat <id>`
+  - Branch a chat with `devbuddy chat branch <id>` or `/branch` in-REPL
+  - Export to Markdown with `devbuddy chat export <id>` (optionally `-o file.md`)
+  - List, show, delete chats via subcommands
+  - Slash commands: `/help`, `/exit`, `/clear`, `/save`, `/summary`, `/model`, `/system`, `/branch`, `/title`, `/history`, `/context`
+  - Auto-saves on every message; auto-titles from first user message
+  - Rolls back the user message if the AI reply fails (no dangling turns)
+  - History capped at last 20 messages per AI call to manage token limits
+
+- **`DEVBUDDY.md` project context** (`src/prompt.js`). Drop a `DEVBUDDY.md` in your project root and its contents are appended to the system prompt of every AI command. Discovery: `./DEVBUDDY.md` → `~/.devbuddy/DEVBUDDY.md`.
+
+- **`devbuddy init`** — creates a `DEVBUDDY.md` template in the current directory.
+
+- **Per-session directory grants** (`devbuddy agent run --allow <dir>`). Agent can be granted access to directories beyond CWD on a per-run basis. Repeatable flag.
+
+- **Planner mode** (`devbuddy agent run --plan`). Agent calls the `plan` tool first with a list of steps, then executes step-by-step with progress display.
+
+- **Auto-rollback**. If a tool fails mid-step, all `write_file`/`edit_file` mutations from that step are automatically rolled back. Backups recorded before each mutation; new files are deleted on rollback, modified files are restored.
+
+- **Parallel reads**. Agent can emit multiple parallel-safe tools (read_file, list_files, glob_search) in a single turn via the `PARALLEL: ... END_PARALLEL` block. Non-parallel-safe tools (write_file, edit_file, run_shell) are refused in parallel blocks.
+
+- **Project memory**. Agent reads `./.devbuddy/memory.md` at the start of each run if it exists. Update it manually to give the agent persistent notes across runs.
+
+- **`glob_search` tool** — find files by pattern without running shell. Returns up to 50 matches across all allowed roots.
+
+- **`plan` tool** — agent can record a multi-step plan that gets displayed to the user.
+
+- All AI commands (ask, summarize, explain, translate) now use `DEVBUDDY.md` as context. The `ask` command prints "using project context: <path>" when a file is found.
+
+- Auto-update check now skips interactive commands (chat, onboard) to avoid interrupting sessions.
+
+### Changed
+
+- Agent core (`src/agent/core.js`) rewritten:
+  - Per-session allowlist with `resetSession()` and `enforcePath()`
+  - Backups tracked globally per step, cleared at step start
+  - `parseToolCalls()` now handles both single calls and `PARALLEL:` blocks
+  - System prompt includes allowed roots, planner note, memory note, and `DEVBUDDY.md` content
+  - Project memory pre-loaded into conversation history
+
+- Agent tools (`src/agent/tools.js`) upgraded:
+  - 8 tools (was 6): added `glob_search`, `plan`
+  - Each tool tagged `parallelSafe`, `confirm`, `dangerous` as appropriate
+  - `write_file` and `edit_file` record backups via `recordBackup()`
+  - `executeToolsParallel()` enforces parallel-safety
+  - `rollbackStep()` and `clearBackups()` exposed for the core to call
+
+- `devbuddy agent run` gains `--allow <dir>` (repeatable) and `--plan` flags.
+
+- Help text updated with chat, init, and project context info.
+
+### Inspired by
+
+- **Aider** — auto-rollback on failure
+- **Cline** — planner mode + progress display + project memory file
+- **Continue** — project-context file (`.continuerc.json` → `DEVBUDDY.md`)
+
+Core agent is now ~400 lines (up from ~200 in v0.3) but with 6× the features.
+
+---
+
 ## [0.3.0] — 2026-06-18
 
 ### Added

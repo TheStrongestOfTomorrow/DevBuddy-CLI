@@ -1,7 +1,7 @@
 {
   "name": "devbuddy",
-  "version": "0.3.0",
-  "description": "A minimal AI-powered CLI that helps developers — multi-provider (HuggingFace, OpenAI, Anthropic, Groq, Ollama, etc.), agentic harness, auto-update.",
+  "version": "0.4.0",
+  "description": "A minimal AI-powered CLI that helps developers — multi-provider, multi-message chat, agentic harness with planner mode + project memory, DEVBUDDY.md context, auto-update.",
   "type": "module",
   "main": "src/index.js",
   "bin": {
@@ -26,7 +26,9 @@
     "groq",
     "ollama",
     "agent",
-    "llm"
+    "chat",
+    "llm",
+    "agentic"
   ],
   "author": "TheStrongestOfTomorrow",
   "license": "MIT",

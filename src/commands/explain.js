@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import { completeWithRetry, isOnboarded, isAuthenticated, warnRateLimit, getActiveProvider, getActiveModel } from "../ai/providers.js";
 import { loadConfig } from "../store.js";
+import { systemPromptSuffix, findDevbuddyMd } from "../prompt.js";
 import * as ui from "../ui.js";
 
 function requireOnboarding() {
@@ -44,7 +45,10 @@ export function register(program) {
       const system =
         `You are a programming teacher. Explain the given code clearly for a ${level} reader. ` +
         `Structure: (1) one-paragraph summary, (2) key parts walked through, (3) any gotchas. ` +
-        `Use fenced code blocks for snippets. Output language: ${cfg.language}.`;
+        `Use fenced code blocks for snippets. Output language: ${cfg.language}.` + systemPromptSuffix();
+
+      const dbMd = findDevbuddyMd();
+      if (dbMd) ui.muted(`using project context: ${dbMd.path}`);
 
       const spinner = new ui.Spinner("Explaining");
       spinner.start();

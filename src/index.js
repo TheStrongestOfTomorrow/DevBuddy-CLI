@@ -21,15 +21,17 @@ import { register as registerAsk }        from "./commands/ask.js";
 import { register as registerSummarize }  from "./commands/summarize.js";
 import { register as registerExplain }    from "./commands/explain.js";
 import { register as registerTranslate }  from "./commands/translate.js";
+import { register as registerChat }       from "./commands/chat.js";
 import { register as registerTodo }       from "./commands/todo.js";
 import { register as registerConfig }     from "./commands/config.js";
 import { register as registerAgent }      from "./commands/agent.js";
 import { register as registerUpdate }     from "./commands/update.js";
+import { register as registerInit }       from "./commands/init.js";
 
 // Commands that should NOT trigger the auto-update check (they're either
 // meta-commands themselves, or short offline operations).
 const SKIP_UPDATE_FOR = new Set([
-  "onboard", "update", "auth", "config", "todo", "help",
+  "onboard", "update", "auth", "config", "todo", "chat", "init", "help",
   undefined, // no command given
 ]);
 
@@ -41,17 +43,20 @@ export function run() {
     .description(
       "A minimal AI-powered CLI that helps developers.\n\n" +
       "  onboard    One-time setup wizard (REQUIRED before AI commands).\n" +
+      "  init       Create a DEVBUDDY.md template (project context for AI).\n" +
       "  ask        Ask a question, get an AI answer.\n" +
       "  summarize  Condense a file or stdin into key points.\n" +
       "  explain    Explain code in plain language.\n" +
       "  translate  Translate text to another language.\n" +
+      "  chat       Multi-message chat with AI. Saved to disk.\n" +
       "  agent      Agentic harness — read/write/edit files, run shell.\n" +
       "  todo       Manage quick todos with priorities.\n" +
       "  auth       Manage API keys across providers.\n" +
       "  config     View and edit persistent settings.\n" +
       "  update     Check for and install updates.\n\n" +
       "Providers: HuggingFace (free) · OpenAI · Anthropic · Groq (free) · OpenRouter · Ollama (local) · Together · Mistral · Cohere\n" +
-      "Storage: ~/.devbuddy/  (config.json, todos.json)"
+      "Project context: ./DEVBUDDY.md → ~/.devbuddy/DEVBUDDY.md\n" +
+      "Storage: ~/.devbuddy/  (config.json, chats/, todos.json)"
     )
     .version(getVersion(), "-v, --version")
     .helpOption("-h, --help", "Show this help.");
@@ -71,10 +76,12 @@ export function run() {
   registerSummarize(program);
   registerExplain(program);
   registerTranslate(program);
+  registerChat(program);
   registerTodo(program);
   registerConfig(program);
   registerAgent(program);
   registerUpdate(program);
+  registerInit(program);
 
   // Default action: show help if no command given
   if (process.argv.length <= 2) {

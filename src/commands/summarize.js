@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import { completeWithRetry, isOnboarded, isAuthenticated, warnRateLimit, getActiveProvider, getActiveModel } from "../ai/providers.js";
 import { loadConfig } from "../store.js";
+import { systemPromptSuffix, findDevbuddyMd } from "../prompt.js";
 import * as ui from "../ui.js";
 
 function requireOnboarding() {
@@ -53,7 +54,10 @@ export function register(program) {
         tldr: `Provide a one-sentence TL;DR followed by at most 3 supporting bullets.`,
       }[style] || `Summarize in ${style} style.`;
 
-      const system = `You are an expert summarizer. ${styleGuide} Output language: ${cfg.language}. Do not add meta commentary.`;
+      const system = `You are an expert summarizer. ${styleGuide} Output language: ${cfg.language}. Do not add meta commentary.` + systemPromptSuffix();
+
+      const dbMd = findDevbuddyMd();
+      if (dbMd) ui.muted(`using project context: ${dbMd.path}`);
 
       const spinner = new ui.Spinner("Summarizing");
       spinner.start();

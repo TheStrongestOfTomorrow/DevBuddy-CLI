@@ -1,8 +1,4 @@
 // `devbuddy agent` — agentic harness for code generation/editing.
-//
-// Default OFF. Enable via `devbuddy agent toggle` or `devbuddy config set agentEnabled true`.
-// Once enabled, `devbuddy agent "<task>"` runs the harness.
-// Use --yolo to skip confirmations (DANGEROUS).
 
 import { runAgent } from "../agent/core.js";
 import { isOnboarded, getActiveProvider, getActiveModel } from "../ai/providers.js";
@@ -18,6 +14,8 @@ export function register(program) {
     .option("--yolo", "Skip all confirmations (DANGEROUS).")
     .option("--max-steps <n>", "Max tool-call steps.", "20")
     .option("-m, --model <name>", "Override the active model for this run.")
+    .option("--plan", "Planner mode: agent writes a plan first, then executes step by step.")
+    .option("--allow <dir>", "Grant access to an additional directory. Repeatable.", (val, acc) => { (acc || []).push(val); return acc; }, [])
     .action(async (taskParts, opts) => {
       if (!isOnboarded()) {
         ui.error(onboardingRequiredMessage());
@@ -41,6 +39,11 @@ export function register(program) {
 
       const p = getActiveProvider();
       ui.muted(`provider: ${p.name}  |  model: ${opts.model || getActiveModel()}`);
+      if (opts.plan) ui.muted(`mode: planner`);
+      if (opts.allow && opts.allow.length) {
+        ui.muted(`extra allowed roots:`);
+        for (const r of opts.allow) ui.muted(`  - ${r}`);
+      }
       ui.blank();
 
       try {
@@ -48,6 +51,8 @@ export function register(program) {
           yolo: opts.yolo || cfg.agentYolo,
           maxSteps: parseInt(opts.maxSteps, 10) || cfg.agentMaxSteps || 20,
           model: opts.model,
+          plan: !!opts.plan,
+          allow: opts.allow || [],
         });
       } catch (e) {
         ui.error(e?.message || String(e));
@@ -73,6 +78,7 @@ export function register(program) {
         ui.blank();
         ui.muted("  Run with: devbuddy agent run \"<your task>\"");
         ui.muted("  The agent can read, write, and edit files in this directory.");
+        ui.muted("  Grant more dirs with: devbuddy agent run --allow <dir> \"<task>\"");
         if (!cfg.agentYolo) {
           ui.muted("  Mutating actions will prompt for confirmation.");
           ui.muted("  Skip prompts with --yolo (DANGEROUS) or `devbuddy config set agentYolo true`.");
@@ -92,12 +98,14 @@ export function register(program) {
       ui.kv("enabled", cfg.agentEnabled ? ui.theme.ok("yes") : "no");
       ui.kv("yolo (skip confirms)", cfg.agentYolo ? ui.theme.err("yes (DANGEROUS)") : "no");
       ui.kv("max-steps", cfg.agentMaxSteps || 20);
+      ui.kv("default scope", "current working directory + any --allow flags");
       ui.blank();
       ui.muted("  toggle: devbuddy agent toggle");
       ui.muted("  run:    devbuddy agent run \"<task>\"");
+      ui.muted("  plan:   devbuddy agent run --plan \"<task>\"");
+      ui.muted("  allow:  devbuddy agent run --allow ../other-project \"<task>\"");
     });
 
-  // Default action: show status
   agent.action(() => {
     const cfg = loadConfig();
     ui.title("devbuddy agent");
@@ -108,6 +116,8 @@ export function register(program) {
     ui.blank();
     ui.muted("  Subcommands: run | toggle | status");
     ui.muted("  Quick start: devbuddy agent toggle && devbuddy agent run \"<task>\"");
+    ui.muted("  With plan:   devbuddy agent run --plan \"<complex task>\"");
+    ui.muted("  Multi-dir:   devbuddy agent run --allow ../shared \"<task>\"");
   });
 }
 

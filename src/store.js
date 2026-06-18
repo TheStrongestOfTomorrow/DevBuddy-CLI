@@ -10,10 +10,15 @@ function ensureDir() {
 
 // --- Config ---
 const DEFAULT_CONFIG = {
-  language: "en",          // preferred output language for ask/explain/translate
-  translateTo: "en",       // default target language for `translate`
-  summarizeStyle: "bullets", // bullets | paragraphs | tldr
-  model: "default",        // informational only (SDK picks the default model)
+  // HuggingFace settings (new in v0.2.0)
+  hfToken: "",              // user's HF access token (set via `devbuddy auth set`)
+  hfBaseUrl: "https://router.huggingface.co/v1",
+  hfModel: "mistralai/Mistral-7B-Instruct-v0.3",
+
+  // Output preferences (carryover from v0.1.0)
+  language: "en",           // preferred output language for ask/explain/translate
+  translateTo: "en",        // default target language for `translate`
+  summarizeStyle: "bullets",// bullets | paragraphs | tldr
   createdAt: null,
 };
 

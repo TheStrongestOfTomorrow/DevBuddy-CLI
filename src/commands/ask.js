@@ -1,6 +1,6 @@
 // `devbuddy ask "<question>"` — AI Q&A in the terminal.
 
-import { completeWithRetry } from "../ai.js";
+import { completeWithRetry, isAuthenticated, warnRateLimit, getAuth } from "../ai.js";
 import { loadConfig } from "../store.js";
 import * as ui from "../ui.js";
 
@@ -9,14 +9,26 @@ export function register(program) {
     .command("ask <question...>")
     .description("Ask any question, get an AI answer in the terminal.")
     .option("-s, --system <prompt>", "Override the system prompt.")
+    .option("-m, --model <name>", "Override the HuggingFace model for this call.")
+    .option("--max-tokens <n>", "Max output tokens.", "1024")
     .option("--json", "Output raw JSON instead of pretty text.")
-    .option("--thinking", "Enable chain-of-thought (slower, deeper).")
     .action(async (questionParts, opts) => {
       const question = questionParts.join(" ").trim();
       if (!question) {
         ui.error("question is required");
         process.exit(1);
       }
+
+      if (!isAuthenticated()) {
+        ui.error(
+          "No HuggingFace token set.\n" +
+          "  Get a free token: https://huggingface.co/settings/tokens\n" +
+          "  Then run: devbuddy auth set hf_xxx"
+        );
+        process.exit(1);
+      }
+
+      warnRateLimit();
 
       const cfg = loadConfig();
       const system =
@@ -30,13 +42,17 @@ export function register(program) {
       try {
         const answer = await completeWithRetry(
           question,
-          { system, thinking: !!opts.thinking },
+          {
+            system,
+            model: opts.model,
+            maxTokens: parseInt(opts.maxTokens, 10) || 1024,
+          },
           2
         );
         spinner.succeed();
 
         if (opts.json) {
-          ui.printJson({ question, answer });
+          ui.printJson({ question, model: opts.model || getAuth().model, answer });
           return;
         }
         ui.blank();

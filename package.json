@@ -1,7 +1,7 @@
 {
   "name": "devbuddy",
-  "version": "0.1.0",
-  "description": "A minimal AI-powered CLI that helps developers — ask, summarize, explain, translate, todos.",
+  "version": "0.2.0",
+  "description": "A minimal AI-powered CLI that helps developers — ask, summarize, explain, translate, todos. Powered by HuggingFace Inference API (free tier).",
   "type": "module",
   "main": "src/index.js",
   "bin": {
@@ -19,7 +19,9 @@
     "ai",
     "developer-tools",
     "assistant",
-    "productivity"
+    "productivity",
+    "huggingface",
+    "llm"
   ],
   "author": "TheStrongestOfTomorrow",
   "license": "MIT",
@@ -33,7 +35,6 @@
   },
   "dependencies": {
     "chalk": "^5.3.0",
-    "commander": "^12.1.0",
-    "z-ai-web-dev-sdk": "latest"
+    "commander": "^12.1.0"
   }
 }

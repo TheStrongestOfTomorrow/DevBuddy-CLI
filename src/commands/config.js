@@ -4,11 +4,20 @@ import { loadConfig, setConfigKey, getConfigKey, saveConfig } from "../store.js"
 import * as ui from "../ui.js";
 
 const KNOWN_KEYS = [
-  ["language",      "Preferred output language for ask/explain/translate (e.g. 'en', 'zh')."],
-  ["translateTo",   "Default target language for `devbuddy translate`."],
-  ["summarizeStyle","bullets | paragraphs | tldr."],
-  ["model",         "Informational only (SDK picks the default model)."],
+  ["hfToken",        "HuggingFace access token. Set via `devbuddy auth set`."],
+  ["hfModel",        "HuggingFace chat model (default: mistralai/Mistral-7B-Instruct-v0.3)."],
+  ["hfBaseUrl",      "HuggingFace API base URL. Default: https://router.huggingface.co/v1"],
+  ["language",       "Preferred output language for ask/explain/translate (e.g. 'en', 'zh')."],
+  ["translateTo",    "Default target language for `devbuddy translate`."],
+  ["summarizeStyle", "bullets | paragraphs | tldr."],
 ];
+
+function maskValue(k, v) {
+  if (k === "hfToken" && v) {
+    return v.length > 8 ? `"${v.slice(0,4)}…${v.slice(-4)}"` : "\"****\"";
+  }
+  return JSON.stringify(v);
+}
 
 export function register(program) {
   const cfg = program.command("config").description("View and edit persistent settings.");
@@ -21,7 +30,7 @@ export function register(program) {
       ui.title("devbuddy config");
       ui.blank();
       for (const [k, desc] of KNOWN_KEYS) {
-        ui.kv(k, JSON.stringify(c[k]));
+        ui.kv(k, maskValue(k, c[k]));
         ui.muted("    " + desc);
       }
       ui.blank();
@@ -37,6 +46,11 @@ export function register(program) {
         ui.error(`unknown key '${key}'`);
         process.exit(1);
       }
+      // Don't print raw token to stdout for safety.
+      if (key === "hfToken") {
+        console.log(maskValue(key, v));
+        return;
+      }
       console.log(typeof v === "string" ? v : JSON.stringify(v));
     });
 
@@ -48,25 +62,36 @@ export function register(program) {
       if (!known) {
         ui.warn(`'${key}' is not a known key — setting anyway.`);
       }
+      if (key === "hfToken") {
+        ui.warn("Use `devbuddy auth set <token>` instead — it also verifies the token.");
+        return;
+      }
       const after = setConfigKey(key, value);
       ui.ok(`${key} = ${JSON.stringify(after[key])}`);
     });
 
   cfg
     .command("reset")
-    .description("Reset all config to defaults.")
+    .description("Reset all config to defaults (also clears your token).")
     .action(() => {
-      saveConfig({ language: "en", translateTo: "en", summarizeStyle: "bullets", model: "default", createdAt: new Date().toISOString() });
+      saveConfig({
+        hfToken: "",
+        hfBaseUrl: "https://router.huggingface.co/v1",
+        hfModel: "mistralai/Mistral-7B-Instruct-v0.3",
+        language: "en",
+        translateTo: "en",
+        summarizeStyle: "bullets",
+        createdAt: new Date().toISOString(),
+      });
       ui.ok("config reset to defaults.");
     });
 
   cfg.action(() => {
-    // `devbuddy config` with no subcommand -> list
     const c = loadConfig();
     ui.title("devbuddy config");
     ui.blank();
     for (const [k, desc] of KNOWN_KEYS) {
-      ui.kv(k, JSON.stringify(c[k]));
+      ui.kv(k, maskValue(k, c[k]));
       ui.muted("    " + desc);
     }
     ui.blank();

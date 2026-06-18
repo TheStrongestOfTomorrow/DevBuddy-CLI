@@ -1,7 +1,7 @@
 // `devbuddy explain <file|->` — explain code in plain language.
 
 import { readFileSync } from "node:fs";
-import { completeWithRetry } from "../ai.js";
+import { completeWithRetry, isAuthenticated, warnRateLimit, getAuth } from "../ai.js";
 import { loadConfig } from "../store.js";
 import * as ui from "../ui.js";
 
@@ -15,6 +15,8 @@ export function register(program) {
     .command("explain <file>")
     .description("Explain code in plain language. Use '-' for stdin.")
     .option("--level <level>", "beginner | intermediate | expert", "intermediate")
+    .option("-m, --model <name>", "Override the HuggingFace model for this call.")
+    .option("--max-tokens <n>", "Max output tokens.", "1024")
     .option("--json", "Output raw JSON.")
     .action(async (file, opts) => {
       let code;
@@ -30,6 +32,17 @@ export function register(program) {
         process.exit(1);
       }
 
+      if (!isAuthenticated()) {
+        ui.error(
+          "No HuggingFace token set.\n" +
+          "  Get a free token: https://huggingface.co/settings/tokens\n" +
+          "  Then run: devbuddy auth set hf_xxx"
+        );
+        process.exit(1);
+      }
+
+      warnRateLimit();
+
       const cfg = loadConfig();
       const level = opts.level || "intermediate";
 
@@ -44,13 +57,17 @@ export function register(program) {
       try {
         const explanation = await completeWithRetry(
           `Explain this code:\n\n\`\`\`\n${code}\n\`\`\``,
-          { system },
+          {
+            system,
+            model: opts.model,
+            maxTokens: parseInt(opts.maxTokens, 10) || 1024,
+          },
           2
         );
         spinner.succeed();
 
         if (opts.json) {
-          ui.printJson({ file, level, explanation });
+          ui.printJson({ file, level, model: opts.model || getAuth().model, explanation });
           return;
         }
         ui.blank();

@@ -1,6 +1,6 @@
 // `devbuddy translate "<text>"` — translate text between languages.
 
-import { completeWithRetry } from "../ai.js";
+import { completeWithRetry, isAuthenticated, warnRateLimit, getAuth } from "../ai.js";
 import { loadConfig } from "../store.js";
 import * as ui from "../ui.js";
 
@@ -9,6 +9,8 @@ export function register(program) {
     .command("translate <text...>")
     .description("Translate text. Default target language from config.")
     .option("-t, --to <lang>", "Target language (e.g. 'en', 'zh', 'es', 'fr').")
+    .option("-m, --model <name>", "Override the HuggingFace model for this call.")
+    .option("--max-tokens <n>", "Max output tokens.", "1024")
     .option("--json", "Output raw JSON.")
     .action(async (textParts, opts) => {
       const text = textParts.join(" ").trim();
@@ -16,6 +18,17 @@ export function register(program) {
         ui.error("text is required");
         process.exit(1);
       }
+
+      if (!isAuthenticated()) {
+        ui.error(
+          "No HuggingFace token set.\n" +
+          "  Get a free token: https://huggingface.co/settings/tokens\n" +
+          "  Then run: devbuddy auth set hf_xxx"
+        );
+        process.exit(1);
+      }
+
+      warnRateLimit();
 
       const cfg = loadConfig();
       const to = opts.to || cfg.translateTo || "en";
@@ -29,11 +42,19 @@ export function register(program) {
       spinner.start();
 
       try {
-        const result = await completeWithRetry(text, { system }, 2);
+        const result = await completeWithRetry(
+          text,
+          {
+            system,
+            model: opts.model,
+            maxTokens: parseInt(opts.maxTokens, 10) || 1024,
+          },
+          2
+        );
         spinner.succeed();
 
         if (opts.json) {
-          ui.printJson({ text, to, translation: result });
+          ui.printJson({ text, to, model: opts.model || getAuth().model, translation: result });
           return;
         }
         ui.blank();

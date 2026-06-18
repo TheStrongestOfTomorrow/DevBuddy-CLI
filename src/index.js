@@ -1,19 +1,37 @@
 // devbuddy — minimal AI-powered dev CLI.
-// Entry point: wires up Commander, global flags, and all subcommands.
+// Entry point: wires up Commander, global flags, all subcommands, and the
+// non-blocking auto-update check.
 //
-// AI backend: HuggingFace Inference API (free tier, rate-limited).
-// Users set their HF token via `devbuddy auth set <token>`.
+// v0.3 highlights:
+//   - Multi-provider (HuggingFace, OpenAI, Anthropic, Groq, OpenRouter,
+//     Ollama, Together, Mistral, Cohere)
+//   - Onboarding gate: AI commands refuse until `devbuddy onboard` is run
+//   - Agentic harness: `devbuddy agent run "<task>"` (off by default)
+//   - Auto-update: checks GitHub on launch, prompts before installing
 
 import { Command } from "commander";
 import * as ui from "./ui.js";
 import { getVersion } from "./ui.js";
-import { register as registerAsk }       from "./commands/ask.js";
-import { register as registerSummarize } from "./commands/summarize.js";
-import { register as registerExplain }   from "./commands/explain.js";
-import { register as registerTranslate } from "./commands/translate.js";
-import { register as registerTodo }      from "./commands/todo.js";
-import { register as registerConfig }    from "./commands/config.js";
-import { register as registerAuth }      from "./commands/auth.js";
+import { loadConfig } from "./store.js";
+import { checkForUpdates } from "./updater/updater.js";
+
+import { register as registerOnboard }    from "./commands/onboard.js";
+import { register as registerAuth }       from "./commands/auth.js";
+import { register as registerAsk }        from "./commands/ask.js";
+import { register as registerSummarize }  from "./commands/summarize.js";
+import { register as registerExplain }    from "./commands/explain.js";
+import { register as registerTranslate }  from "./commands/translate.js";
+import { register as registerTodo }       from "./commands/todo.js";
+import { register as registerConfig }     from "./commands/config.js";
+import { register as registerAgent }      from "./commands/agent.js";
+import { register as registerUpdate }     from "./commands/update.js";
+
+// Commands that should NOT trigger the auto-update check (they're either
+// meta-commands themselves, or short offline operations).
+const SKIP_UPDATE_FOR = new Set([
+  "onboard", "update", "auth", "config", "todo", "help",
+  undefined, // no command given
+]);
 
 export function run() {
   const program = new Command();
@@ -22,22 +40,22 @@ export function run() {
     .name("devbuddy")
     .description(
       "A minimal AI-powered CLI that helps developers.\n\n" +
+      "  onboard    One-time setup wizard (REQUIRED before AI commands).\n" +
       "  ask        Ask a question, get an AI answer.\n" +
       "  summarize  Condense a file or stdin into key points.\n" +
       "  explain    Explain code in plain language.\n" +
       "  translate  Translate text to another language.\n" +
+      "  agent      Agentic harness — read/write/edit files, run shell.\n" +
       "  todo       Manage quick todos with priorities.\n" +
+      "  auth       Manage API keys across providers.\n" +
       "  config     View and edit persistent settings.\n" +
-      "  auth       Manage your HuggingFace access token.\n\n" +
-      "AI backend: HuggingFace Inference API (free tier, rate-limited).\n" +
-      "First time? Run: devbuddy auth set hf_xxx\n" +
-      "Get a free token: https://huggingface.co/settings/tokens\n" +
+      "  update     Check for and install updates.\n\n" +
+      "Providers: HuggingFace (free) · OpenAI · Anthropic · Groq (free) · OpenRouter · Ollama (local) · Together · Mistral · Cohere\n" +
       "Storage: ~/.devbuddy/  (config.json, todos.json)"
     )
     .version(getVersion(), "-v, --version")
     .helpOption("-h, --help", "Show this help.");
 
-  // Global options
   program.option("--no-color", "Disable colored output.");
   program.hook("preAction", (cmd) => {
     const opts = cmd.opts();
@@ -47,6 +65,7 @@ export function run() {
   });
 
   // Register subcommands
+  registerOnboard(program);
   registerAuth(program);
   registerAsk(program);
   registerSummarize(program);
@@ -54,11 +73,30 @@ export function run() {
   registerTranslate(program);
   registerTodo(program);
   registerConfig(program);
+  registerAgent(program);
+  registerUpdate(program);
 
   // Default action: show help if no command given
   if (process.argv.length <= 2) {
     program.outputHelp();
     process.exit(0);
+  }
+
+  // Fire-and-forget auto-update check (non-blocking, but we await before exit
+  // if it returns a prompt). We do this in preAction so we know the command.
+  const cmdName = process.argv[2] && !process.argv[2].startsWith("-") ? process.argv[2] : undefined;
+  const cfg = loadConfig();
+
+  if (!SKIP_UPDATE_FOR.has(cmdName) && (cfg.autoUpdate || "prompt") !== "off") {
+    // Run check in background; if it needs a prompt, await it before the command.
+    (async () => {
+      try {
+        await checkForUpdates();
+      } catch {
+        // Never let updater break the actual command.
+      }
+      // The actual command runs concurrently via program.parseAsync below.
+    })();
   }
 
   program.parseAsync(process.argv).catch((e) => {

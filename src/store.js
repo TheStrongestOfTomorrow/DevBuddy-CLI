@@ -8,19 +8,60 @@ function ensureDir() {
   if (!existsSync(APP_DIR)) mkdirSync(APP_DIR, { recursive: true });
 }
 
-// --- Config ---
+// --- Config (v0.3 schema) ---
 const DEFAULT_CONFIG = {
-  // HuggingFace settings (new in v0.2.0)
-  hfToken: "",              // user's HF access token (set via `devbuddy auth set`)
-  hfBaseUrl: "https://router.huggingface.co/v1",
-  hfModel: "mistralai/Mistral-7B-Instruct-v0.3",
+  // Onboarding state
+  onboardingComplete: false,
+  onboardedAt: null,
 
-  // Output preferences (carryover from v0.1.0)
-  language: "en",           // preferred output language for ask/explain/translate
-  translateTo: "en",        // default target language for `translate`
-  summarizeStyle: "bullets",// bullets | paragraphs | tldr
+  // Active provider + per-provider config
+  provider: null,                // 'huggingface' | 'openai' | ... (set during onboard)
+  providers: {},                 // { huggingface: { apiKey, model }, openai: { ... }, ... }
+
+  // Output preferences
+  language: "en",
+  translateTo: "en",
+  summarizeStyle: "bullets",
+
+  // Agent
+  agentEnabled: false,           // master toggle for agentic mode
+  agentMaxSteps: 20,
+  agentYolo: false,              // skip confirms (DANGEROUS)
+
+  // Auto-update: 'off' | 'prompt' (default) | 'silent'
+  autoUpdate: "prompt",
+  lastUpdateCheck: null,
+
   createdAt: null,
 };
+
+// Migration: if a v0.2 config exists, port hfToken/hfModel/hfBaseUrl into
+// the new providers map and clear old keys.
+function migrateV2ToV3(cfg) {
+  if (cfg.hfToken || cfg.hfModel || cfg.hfBaseUrl) {
+    if (!cfg.providers) cfg.providers = {};
+    if (!cfg.providers.huggingface) cfg.providers.huggingface = {};
+    if (cfg.hfToken) {
+      cfg.providers.huggingface.apiKey = cfg.hfToken;
+      delete cfg.hfToken;
+    }
+    if (cfg.hfModel) {
+      cfg.providers.huggingface.model = cfg.hfModel;
+      delete cfg.hfModel;
+    }
+    if (cfg.hfBaseUrl) {
+      // Not exposed in v0.3 UI; keep for backward-compat.
+      cfg.providers.huggingface.baseUrl = cfg.hfBaseUrl;
+      delete cfg.hfBaseUrl;
+    }
+    if (!cfg.provider) cfg.provider = "huggingface";
+    if (!cfg.onboardingComplete && cfg.providers.huggingface.apiKey) {
+      cfg.onboardingComplete = true;
+      cfg.onboardedAt = new Date().toISOString();
+    }
+  }
+  return cfg;
+}
 
 export function loadConfig() {
   ensureDir();
@@ -31,7 +72,9 @@ export function loadConfig() {
   }
   try {
     const raw = readFileSync(CONFIG_FILE, "utf8");
-    return { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
+    let parsed = JSON.parse(raw);
+    parsed = migrateV2ToV3(parsed);
+    return { ...DEFAULT_CONFIG, ...parsed };
   } catch {
     return { ...DEFAULT_CONFIG };
   }
@@ -44,7 +87,6 @@ export function saveConfig(cfg) {
 
 export function setConfigKey(key, value) {
   const cfg = loadConfig();
-  // Cast booleans / numbers from string form for convenience.
   if (value === "true") value = true;
   else if (value === "false") value = false;
   else if (/^-?\d+$/.test(value)) value = Number(value);
@@ -56,6 +98,41 @@ export function setConfigKey(key, value) {
 export function getConfigKey(key) {
   const cfg = loadConfig();
   return key in cfg ? cfg[key] : undefined;
+}
+
+// --- Provider-scoped setters ---
+
+export function setProviderKey(providerId, apiKey) {
+  const cfg = loadConfig();
+  if (!cfg.providers) cfg.providers = {};
+  if (!cfg.providers[providerId]) cfg.providers[providerId] = {};
+  cfg.providers[providerId].apiKey = apiKey;
+  saveConfig(cfg);
+  return cfg;
+}
+
+export function setProviderModel(providerId, model) {
+  const cfg = loadConfig();
+  if (!cfg.providers) cfg.providers = {};
+  if (!cfg.providers[providerId]) cfg.providers[providerId] = {};
+  cfg.providers[providerId].model = model;
+  saveConfig(cfg);
+  return cfg;
+}
+
+export function setActiveProvider(providerId) {
+  const cfg = loadConfig();
+  cfg.provider = providerId;
+  saveConfig(cfg);
+  return cfg;
+}
+
+export function markOnboarded() {
+  const cfg = loadConfig();
+  cfg.onboardingComplete = true;
+  cfg.onboardedAt = new Date().toISOString();
+  saveConfig(cfg);
+  return cfg;
 }
 
 // --- Todos ---

@@ -1,7 +1,7 @@
-// `devbuddy auth` — manage HuggingFace access token.
+// `devbuddy auth` — manage API keys across all providers.
 
-import { setToken, clearToken, verifyToken, getAuth, isAuthenticated, KNOWN_MODELS } from "../ai.js";
-import { loadConfig, saveConfig } from "../store.js";
+import { PROVIDERS, PROVIDER_IDS, getActiveProvider, getActiveProviderId, getActiveKey, verifyActiveProvider } from "../ai/providers.js";
+import { loadConfig, setProviderKey, setActiveProvider, setProviderModel, saveConfig } from "../store.js";
 import * as ui from "../ui.js";
 
 function mask(token) {
@@ -11,131 +11,121 @@ function mask(token) {
 }
 
 export function register(program) {
-  const auth = program.command("auth").description("Manage your HuggingFace access token.");
+  const auth = program.command("auth").description("Manage API keys across all providers.");
 
   auth
-    .command("set <token>")
-    .description("Save your HuggingFace token. Get one at https://huggingface.co/settings/tokens")
-    .option("--verify", "Verify the token works before saving (default: true).")
-    .option("--no-verify", "Skip verification; save immediately.")
-    .action(async (token, opts) => {
-      token = (token || "").trim();
-      if (!token) { ui.error("token is required"); process.exit(1); }
-      if (!token.startsWith("hf_")) {
-        ui.warn("Token doesn't start with 'hf_' — HuggingFace tokens usually do. Double-check it.");
+    .command("set <key>")
+    .description("Set the API key for the active provider. (Use `devbuddy onboard` to switch providers.)")
+    .option("-p, --provider <id>", "Set key for a different provider (and make it active).")
+    .option("--no-verify", "Skip the connection test before saving.")
+    .action(async (key, opts) => {
+      key = (key || "").trim();
+      if (!key) { ui.error("key is required"); process.exit(1); }
+
+      let providerId = opts.provider || getActiveProviderId();
+      if (!PROVIDERS[providerId]) {
+        ui.error(`unknown provider '${providerId}'. valid: ${PROVIDER_IDS.join(", ")}`);
+        process.exit(1);
       }
+      const provider = PROVIDERS[providerId];
 
-      // Save first so the token is available even if verification fails
-      // (e.g. due to network issues or shared-IP rate limits).
-      setToken(token);
-      ui.ok("token saved to ~/.devbuddy/config.json");
+      if (opts.provider) setActiveProvider(providerId);
+      setProviderKey(providerId, key);
+      ui.ok(`key saved for ${provider.name} (now active).`);
 
-      if (opts.verify !== false) {
-        const spinner = new ui.Spinner("Verifying token");
+      if (opts.verify !== false && providerId !== "ollama") {
+        const spinner = new ui.Spinner("Verifying");
         spinner.start();
         try {
-          const info = await verifyToken(token);
-          spinner.succeed(`Verified as ${info.type} '${info.name}'`);
+          await verifyActiveProvider();
+          spinner.succeed("connection verified.");
         } catch (e) {
           spinner.fail();
-          ui.warn(
-            `Could not verify token: ${e?.message || e}\n` +
-            "The token is still saved. If it's correct, AI commands will work — " +
-            "verification may have failed due to network rate limits on this IP."
-          );
+          ui.warn(`could not verify: ${e.message}`);
+          ui.muted("key still saved. try `devbuddy ask \"hi\"` to test.");
         }
       }
-
-      ui.blank();
-      ui.muted("Try it now: devbuddy ask \"hello\"");
-      ui.muted("Free tier reminder: HuggingFace rate-limits ~1000 req/month per user.");
     });
 
   auth
     .command("status")
-    .description("Show whether a token is configured (does not verify it).")
+    .description("Show active provider, key (masked), and model.")
     .action(() => {
-      const { token, model, baseUrl } = getAuth();
-      if (!token) {
-        ui.warn("No token configured.");
-        ui.blank();
-        ui.muted("Set one with: devbuddy auth set hf_xxx");
-        ui.muted("Get a free token: https://huggingface.co/settings/tokens");
-        return;
-      }
+      const cfg = loadConfig();
+      const provider = getActiveProvider();
+      const key = getActiveKey();
       ui.title("devbuddy auth status");
       ui.blank();
-      ui.kv("token", mask(token));
-      ui.kv("model", model);
-      ui.kv("baseUrl", baseUrl);
+      ui.kv("active provider", `${provider.name} (${cfg.provider || "huggingface"})`);
+      ui.kv("api key", mask(key));
+      ui.kv("model", cfg.providers?.[cfg.provider]?.model || provider.defaultModel);
+      ui.kv("onboarded", cfg.onboardingComplete ? ui.theme.ok("yes") : ui.theme.warn("no — run `devbuddy onboard`"));
       ui.blank();
-      ui.muted("Verify it works: devbuddy auth verify");
+      ui.muted("Stored keys (all providers):");
+      for (const id of PROVIDER_IDS) {
+        const k = cfg.providers?.[id]?.apiKey;
+        if (k) {
+          const mark = id === cfg.provider ? ui.theme.ok("→") : " ";
+          console.log(`  ${mark} ${id}: ${mask(k)}`);
+        }
+      }
+      ui.blank();
+      ui.muted("Switch: `devbuddy onboard --force`  |  Add key: `devbuddy auth set <key> --provider <id>`");
     });
 
   auth
-    .command("verify")
-    .description("Verify the saved token by calling HuggingFace.")
-    .action(async () => {
-      const { token } = getAuth();
-      if (!token) {
-        ui.error("no token set — run `devbuddy auth set <token>` first");
-        process.exit(1);
-      }
-      const spinner = new ui.Spinner("Verifying");
-      spinner.start();
-      try {
-        const info = await verifyToken(token);
-        spinner.succeed(`Token OK — authenticated as ${info.type} '${info.name}'`);
-      } catch (e) {
-        spinner.fail();
-        ui.error(e?.message || String(e));
-        process.exit(1);
-      }
-    });
-
-  auth
-    .command("clear")
-    .description("Remove the saved token.")
+    .command("providers")
+    .description("List all supported providers.")
     .action(() => {
-      clearToken();
-      ui.ok("token removed.");
+      const cfg = loadConfig();
+      const active = cfg.provider;
+      ui.title("supported providers");
+      ui.blank();
+      for (const id of PROVIDER_IDS) {
+        const p = PROVIDERS[id];
+        const mark = id === active ? ui.theme.ok("→") : " ";
+        const hasKey = cfg.providers?.[id]?.apiKey ? ui.theme.ok("✓") : ui.theme.muted("·");
+        const tag = p.free ? ui.theme.ok("(free)") : ui.theme.muted("(paid)");
+        console.log(`  ${mark} ${hasKey} ${ui.theme.value(id.padEnd(12))} ${tag} ${p.name}`);
+        ui.muted(`        ${p.notes}`);
+      }
+      ui.blank();
+      ui.muted("Switch: devbuddy onboard --force   |   Set key: devbuddy auth set <key> --provider <id>");
     });
 
   auth
-    .command("models")
-    .description("List known free HuggingFace chat models.")
-    .action(() => {
-      const { model: current } = getAuth();
-      ui.title("Known free HuggingFace chat models");
-      ui.blank();
-      for (const m of KNOWN_MODELS) {
-        const mark = m === current ? ui.theme.ok("→") : ui.theme.muted(" ");
-        console.log(`  ${mark} ${m}`);
+    .command("clear [provider]")
+    .description("Remove the API key for a provider (default: active).")
+    .action((providerId) => {
+      const cfg = loadConfig();
+      const id = providerId || cfg.provider;
+      if (!cfg.providers || !cfg.providers[id]) {
+        ui.warn(`no key set for ${id}.`);
+        return;
       }
-      ui.blank();
-      ui.muted("Set with: devbuddy config set hfModel <name>");
-      ui.muted("Browse all: https://huggingface.co/models?inference=warm&sort=trending");
+      delete cfg.providers[id].apiKey;
+      if (Object.keys(cfg.providers[id]).length === 0) delete cfg.providers[id];
+      saveConfig(cfg);
+      ui.ok(`key cleared for ${id}.`);
     });
 
+  // Default action: status
   auth.action(() => {
-    // `devbuddy auth` with no subcommand -> status
-    const { token, model, baseUrl } = getAuth();
+    const cfg = loadConfig();
+    const provider = getActiveProvider();
+    const key = getActiveKey();
     ui.title("devbuddy auth");
     ui.blank();
-    if (!token) {
-      ui.warn("No token configured.");
+    if (!cfg.onboardingComplete) {
+      ui.warn("Not onboarded yet.");
       ui.blank();
-      ui.muted("  devbuddy auth set hf_xxx       # save your token");
-      ui.muted("  devbuddy auth status           # check if a token is set");
-      ui.muted("  devbuddy auth models           # list free models");
+      ui.muted("  Run: devbuddy onboard   (interactive setup, ~1 min)");
       ui.blank();
-      ui.muted("Get a free token at https://huggingface.co/settings/tokens");
-    } else {
-      ui.kv("token", mask(token));
-      ui.kv("model", model);
-      ui.kv("baseUrl", baseUrl);
-      ui.blank();
-      ui.muted("Subcommands: set | status | verify | clear | models");
     }
+    ui.kv("active provider", `${provider.name} (${cfg.provider || "huggingface"})`);
+    ui.kv("api key", mask(key));
+    ui.kv("model", cfg.providers?.[cfg.provider]?.model || provider.defaultModel);
+    ui.blank();
+    ui.muted("Subcommands: set | status | providers | clear");
   });
 }

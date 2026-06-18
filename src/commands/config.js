@@ -1,20 +1,24 @@
 // `devbuddy config` — persistent settings stored at ~/.devbuddy/config.json
 
 import { loadConfig, setConfigKey, getConfigKey, saveConfig } from "../store.js";
+import { PROVIDERS, PROVIDER_IDS, getActiveProviderId } from "../ai/providers.js";
 import * as ui from "../ui.js";
 
 const KNOWN_KEYS = [
-  ["hfToken",        "HuggingFace access token. Set via `devbuddy auth set`."],
-  ["hfModel",        "HuggingFace chat model (default: mistralai/Mistral-7B-Instruct-v0.3)."],
-  ["hfBaseUrl",      "HuggingFace API base URL. Default: https://router.huggingface.co/v1"],
-  ["language",       "Preferred output language for ask/explain/translate (e.g. 'en', 'zh')."],
-  ["translateTo",    "Default target language for `devbuddy translate`."],
-  ["summarizeStyle", "bullets | paragraphs | tldr."],
+  ["provider",        "Active provider ID. One of: " + PROVIDER_IDS.join(", ")],
+  ["language",        "Preferred output language for ask/explain/translate (e.g. 'en', 'zh')."],
+  ["translateTo",     "Default target language for `devbuddy translate`."],
+  ["summarizeStyle",  "bullets | paragraphs | tldr."],
+  ["agentEnabled",    "true/false — master toggle for agentic mode."],
+  ["agentYolo",       "true/false — skip agent confirmations (DANGEROUS)."],
+  ["agentMaxSteps",   "Max tool-call steps per agent run (default 20)."],
+  ["autoUpdate",      "off | prompt | silent (default: prompt)."],
+  ["onboardingComplete", "true/false — whether onboarding has been completed."],
 ];
 
 function maskValue(k, v) {
-  if (k === "hfToken" && v) {
-    return v.length > 8 ? `"${v.slice(0,4)}…${v.slice(-4)}"` : "\"****\"";
+  if (typeof v === "string" && v.length > 8 && /token|key/i.test(k)) {
+    return `"${v.slice(0,4)}…${v.slice(-4)}"`;
   }
   return JSON.stringify(v);
 }
@@ -42,15 +46,7 @@ export function register(program) {
     .description("Get a single config value.")
     .action((key) => {
       const v = getConfigKey(key);
-      if (v === undefined) {
-        ui.error(`unknown key '${key}'`);
-        process.exit(1);
-      }
-      // Don't print raw token to stdout for safety.
-      if (key === "hfToken") {
-        console.log(maskValue(key, v));
-        return;
-      }
+      if (v === undefined) { ui.error(`unknown key '${key}'`); process.exit(1); }
       console.log(typeof v === "string" ? v : JSON.stringify(v));
     });
 
@@ -59,31 +55,48 @@ export function register(program) {
     .description("Set a config value. Booleans/numbers are auto-cast.")
     .action((key, value) => {
       const known = KNOWN_KEYS.find(([k]) => k === key);
-      if (!known) {
-        ui.warn(`'${key}' is not a known key — setting anyway.`);
+      if (!known) ui.warn(`'${key}' is not a known key — setting anyway.`);
+
+      // Special-case provider switching to also validate.
+      if (key === "provider") {
+        if (!PROVIDERS[value]) {
+          ui.error(`unknown provider '${value}'. valid: ${PROVIDER_IDS.join(", ")}`);
+          process.exit(1);
+        }
       }
-      if (key === "hfToken") {
-        ui.warn("Use `devbuddy auth set <token>` instead — it also verifies the token.");
-        return;
-      }
+
       const after = setConfigKey(key, value);
       ui.ok(`${key} = ${JSON.stringify(after[key])}`);
+
+      // Helpful follow-up messages
+      if (key === "provider") {
+        ui.muted(`  switched to ${value}. set its key with: devbuddy auth set <key>`);
+      }
+      if (key === "agentEnabled" && after[key] === true) {
+        ui.muted("  now run: devbuddy agent run \"<task>\"");
+      }
     });
 
   cfg
     .command("reset")
-    .description("Reset all config to defaults (also clears your token).")
+    .description("Reset all config to defaults (also clears all keys).")
     .action(() => {
       saveConfig({
-        hfToken: "",
-        hfBaseUrl: "https://router.huggingface.co/v1",
-        hfModel: "mistralai/Mistral-7B-Instruct-v0.3",
+        onboardingComplete: false,
+        onboardedAt: null,
+        provider: null,
+        providers: {},
         language: "en",
         translateTo: "en",
         summarizeStyle: "bullets",
+        agentEnabled: false,
+        agentMaxSteps: 20,
+        agentYolo: false,
+        autoUpdate: "prompt",
+        lastUpdateCheck: null,
         createdAt: new Date().toISOString(),
       });
-      ui.ok("config reset to defaults.");
+      ui.ok("config reset. run `devbuddy onboard` to set up again.");
     });
 
   cfg.action(() => {

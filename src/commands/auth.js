@@ -90,6 +90,37 @@ export function register(program) {
     });
 
   auth
+    .command("model [name]")
+    .description("Set or show the active provider's model. Pass any model ID — doesn't have to be in the known list.")
+    .action((name) => {
+      const cfg = loadConfig();
+      const activeId = getActiveProviderId();
+      if (!cfg.provider) {
+        ui.error("no active provider. run `devbuddy onboard` first.");
+        process.exit(1);
+      }
+      const current = cfg.providers?.[activeId]?.model || PROVIDERS[activeId].defaultModel;
+      if (!name) {
+        ui.muted(`current model: ${current}`);
+        ui.muted(`  provider: ${PROVIDERS[activeId].name} (${activeId})`);
+        ui.blank();
+        ui.muted(`known models for ${PROVIDERS[activeId].name}:`);
+        for (const m of PROVIDERS[activeId].models) {
+          const mark = m === current ? ui.theme.ok("→") : " ";
+          console.log(`  ${mark} ${m}`);
+        }
+        ui.blank();
+        ui.muted(`change with: devbuddy auth model <any-model-id>`);
+        ui.muted(`  (you can type any model ID — it doesn't have to be in the list)`);
+        return;
+      }
+      setProviderModel(activeId, name);
+      ui.ok(`model set to: ${name}`);
+      ui.muted(`  provider: ${PROVIDERS[activeId].name}`);
+      ui.muted(`  (custom model IDs are allowed — useful for downloaded Ollama models, fine-tunes, etc.)`);
+    });
+
+  auth
     .command("status")
     .description("Show active provider, key (masked), and model.")
     .action(() => {

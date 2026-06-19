@@ -50,6 +50,33 @@ async function pickFromList(title, options, defaultIdx = 0) {
   return idx;
 }
 
+// Pick a model from the provider's known list, with an extra "type your own"
+// option for users who downloaded a different model or use an unlisted one.
+async function pickModel(provider, { indent = "" } = {}) {
+  const knownModels = provider.models || [];
+  const options = knownModels.map((m) => ({ label: m }));
+  // Append the "custom" option
+  options.push({
+    label: ui.theme.accent("✎  Type your own model ID…"),
+    desc: ui.theme.muted("for models not in the list (e.g. custom Ollama models, fine-tunes)"),
+  });
+  const defaultIdx = Math.max(0, knownModels.indexOf(provider.defaultModel));
+  const idx = await pickFromList(`${indent}Pick a model`, options, defaultIdx);
+
+  if (idx < knownModels.length) {
+    return knownModels[idx];
+  }
+
+  // Custom model — prompt for it
+  ui.blank();
+  const custom = await prompt(`${indent}  Enter model ID (e.g. ${knownModels[0] || "llama3.2"}): `);
+  if (!custom || !custom.trim()) {
+    ui.warn(`${indent}  no model entered — using default: ${provider.defaultModel}`);
+    return provider.defaultModel;
+  }
+  return custom.trim();
+}
+
 export function register(program) {
   program
     .command("onboard")
@@ -114,18 +141,8 @@ export function register(program) {
       }
       setProviderKey(providerId, apiKey);
 
-      // --- Step 3: pick model ---
-      const modelOptions = provider.models.map((m) => ({ label: m }));
-      const defaultModelIdx = Math.max(
-        0,
-        provider.models.indexOf(provider.defaultModel)
-      );
-      const modelIdx = await pickFromList(
-        `Step 3: pick a model`,
-        modelOptions,
-        defaultModelIdx
-      );
-      const model = provider.models[modelIdx];
+      // --- Step 3: pick model (with custom option) ---
+      const model = await pickModel(provider);
       setProviderModel(providerId, model);
 
       // --- Step 3b: multi-key loop — add more providers? ---
@@ -168,14 +185,9 @@ export function register(program) {
         }
         setProviderKey(moreId, moreKey);
 
-        // Pick model for this provider
-        const moreModels = moreProvider.models.map((m) => ({ label: m }));
-        const moreModelIdx = await pickFromList(
-          `    Pick model for ${moreProvider.name}`,
-          moreModels,
-          Math.max(0, moreProvider.models.indexOf(moreProvider.defaultModel))
-        );
-        setProviderModel(moreId, moreProvider.models[moreModelIdx]);
+        // Pick model for this provider (with custom option)
+        const moreModel = await pickModel(moreProvider, { indent: "    " });
+        setProviderModel(moreId, moreModel);
         ui.ok(`    ${moreProvider.name} configured.`);
       }
 

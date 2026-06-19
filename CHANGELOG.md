@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] — 2026-06-19
+
+### Hotfix
+
+- **Custom model ID during onboarding.** The model picker now includes a "✎ Type your own model ID…" option as the last entry. Users who downloaded a different Ollama model, use a fine-tune, or want an unlisted model can now type any model ID instead of being forced to pick from the known list. Applies to both the primary onboarding flow and the multi-key "add another provider" loop.
+
+- **New `devbuddy auth model [name]` command.** Set or show the active provider's model post-onboarding. Accepts any model ID — no list restriction. With no argument, shows the current model + the known list for reference.
+
+  ```bash
+  devbuddy auth model                    # show current + known list
+  devbuddy auth model llama3.2:8b        # set any model ID
+  devbuddy auth model my-custom-finetune # works for unlisted models too
+  ```
+
+- **`scripts/update-v1.0.1.sh`** — tagged update script for v1.0.1.
+
+### Changed
+
+- `onboard.js` model picker refactored into a reusable `pickModel()` helper that appends the custom option.
+- Both onboarding model pickers (primary + multi-key loop) now use `pickModel()`.
+- `auth` command help updated to mention `auth model`.
+
+---
+
 ## [1.0.0] — 2026-06-19
 
 🎉 **Major release.** DevBuddy is now a v1.0-grade CLI with streaming, MCP server capabilities, Ollama support, and a full developer toolset.

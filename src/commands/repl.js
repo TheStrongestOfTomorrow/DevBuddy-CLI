@@ -11,7 +11,7 @@
 // something, then say /agent "now go implement that" and the agent runs.
 
 import { createChat, getChat, saveChat, appendMessage, listChats, deleteChat, branchChat, exportChatAsMarkdown } from "../chat/store.js";
-import { complete, isOnboarded, isAuthenticated, getActiveProvider, getActiveModel, warnRateLimit, PROVIDERS, PROVIDER_IDS, getActiveProviderId } from "../ai/providers.js";
+import { complete, completeStream, isOnboarded, isAuthenticated, getActiveProvider, getActiveModel, warnRateLimit, PROVIDERS, PROVIDER_IDS, getActiveProviderId } from "../ai/providers.js";
 import { loadDevbuddyMd, findDevbuddyMd, systemPromptSuffix } from "../prompt.js";
 import { loadConfig, saveConfig } from "../store.js";
 import { writeFileSync } from "node:fs";
@@ -350,20 +350,22 @@ export async function runUnifiedRepl({ chat: initialChat, opts = {} }) {
     spinner.start();
 
     try {
-      const reply = await complete(null, {
+      // Stream the response token-by-token
+      ui.blank();
+      process.stdout.write(`  ${ui.theme.value("ai")} ${ui.theme.muted("·")} `);
+      const reply = await completeStream(null, {
         messages: [
           { role: "system", content: baseSystem },
           ...convo,
         ],
         model: modelOverride,
         maxTokens: 1024,
+        onToken: (chunk) => process.stdout.write(chunk),
       });
       spinner.stop();
+      ui.blank(); ui.blank();
 
       appendMessage(chat, "assistant", reply);
-      ui.blank();
-      console.log(`  ${ui.theme.value("ai")} ${ui.theme.muted("·")} ${reply}`);
-      ui.blank();
     } catch (e) {
       spinner.fail();
       ui.error(e?.message || String(e));

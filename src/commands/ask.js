@@ -1,6 +1,6 @@
 // `devbuddy ask "<question>"` — AI Q&A in the terminal.
 
-import { completeWithRetry, isOnboarded, isAuthenticated, warnRateLimit, getActiveProvider, getActiveModel } from "../ai/providers.js";
+import { completeWithRetry, completeStream, isOnboarded, isAuthenticated, warnRateLimit, getActiveProvider, getActiveModel } from "../ai/providers.js";
 import { loadConfig } from "../store.js";
 import { systemPromptSuffix, findDevbuddyMd } from "../prompt.js";
 import * as ui from "../ui.js";
@@ -33,6 +33,7 @@ export function register(program) {
     .option("-m, --model <name>", "Override the model for this call.")
     .option("--max-tokens <n>", "Max output tokens.", "1024")
     .option("--json", "Output raw JSON instead of pretty text.")
+    .option("--no-stream", "Disable streaming (wait for full response).")
     .action(async (questionParts, opts) => {
       requireOnboarding();
       const question = questionParts.join(" ").trim();
@@ -50,6 +51,26 @@ export function register(program) {
 
       if (dbMd) ui.muted(`using project context: ${dbMd.path}`);
 
+      // Streaming path (default)
+      if (opts.stream !== false) {
+        ui.blank();
+        try {
+          process.stdout.write(ui.theme.value(""));
+          await completeStream(question, {
+            system,
+            model: opts.model,
+            maxTokens: parseInt(opts.maxTokens, 10) || 1024,
+            onToken: (chunk) => process.stdout.write(chunk),
+          });
+          ui.blank(); ui.blank();
+        } catch (e) {
+          ui.error(e?.message || String(e));
+          process.exit(1);
+        }
+        return;
+      }
+
+      // Non-streaming path (--no-stream or --json)
       const spinner = new ui.Spinner("Thinking");
       spinner.start();
 

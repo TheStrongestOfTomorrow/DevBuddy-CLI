@@ -5,6 +5,94 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] — 2026-06-19
+
+🎉 **Major release.** DevBuddy is now a v1.0-grade CLI with streaming, MCP server capabilities, Ollama support, and a full developer toolset.
+
+### Added
+
+- **DevBuddy as an MCP server** (`src/mcp/server.js` + `src/commands/act-as-mcp.js`). Expose DevBuddy's capabilities as MCP tools:
+  - **Both transports:** SSE (HTTP, default port 8765) and stdio (for Claude Desktop etc.).
+  - **12 exposed tools:** `chat`, `read_file`, `write_file`, `edit_file`, `list_files`, `grep_search`, `glob_search`, `run_shell`, `list_todos`, `add_todo`, `done_todo`, `get_config`.
+  - **JSON-RPC over SSE:** proper MCP protocol implementation. Initialize → tools/list → tools/call.
+  - **Hard gate:** disabled by default. Enable with `devbuddy config set experimentalActAsMcp true`. Shows ⚠️ warning on each run.
+  - New `devbuddy act-as-mcp` command with `--transport`, `--port`, `--host` options.
+
+- **Streaming responses** (`completeStream()` in `src/ai/providers.js`). Tokens stream as they arrive:
+  - `devbuddy ask` streams by default (use `--no-stream` to wait for full response).
+  - Unified REPL chat mode streams responses.
+  - `devbuddy review` streams the review output.
+  - Uses OpenAI-compatible SSE for openai-type providers.
+  - Anthropic and Cohere fall back to non-streaming + simulated word-by-word chunking.
+  - New config key `stream` (default: true).
+
+- **Ollama auth fix.** Ollama no longer requires an API key:
+  - `isAuthenticated()` returns `true` for ollama automatically.
+  - `getActiveKey()` returns dummy `"ollama"` bearer for the Authorization header.
+  - `complete()` skips the key check for ollama.
+  - `doctor` shows "ollama dummy" in key format check.
+  - `auth status` shows ollama as authenticated even without a stored key.
+
+- **`devbuddy commit`** (`src/commands/commit.js`). Generate conventional commit messages from staged/unstaged git diff:
+  - Uses AI to analyze the diff and produce `type(scope): subject` format.
+  - Optional `--apply` to commit directly (with confirmation).
+  - `--staged` (default) or `--unstaged`.
+  - Truncates large diffs at 20KB.
+
+- **`devbuddy review`** (`src/commands/review.js`). AI code review on a diff:
+  - Streaming output by default.
+  - `--staged` (default), `--unstaged`, or `--commit <sha>`.
+  - Reviews for: bugs, security, performance, readability, best practices.
+  - Structured output: Summary → Issues (with severity) → Suggestions → Verdict.
+
+- **`devbuddy doctor`** (`src/commands/doctor.js`). Diagnose setup issues:
+  - Checks: Node version, app directory, config file, onboarding, API key, provider, DEVBUDDY.md, MCP servers, todos file, network (GitHub), git, experimental flags.
+  - Returns exit code 1 if any errors found.
+  - 11 checks total.
+
+- **`devbuddy history`** (`src/commands/history.js`). Show command history:
+  - Stored at `~/.devbuddy/history.jsonl` (JSON Lines format).
+  - `--lines <n>` (default 20), `--grep <pattern>`, `--clear`.
+  - `recordCommand()` helper for future use by index.js preAction hook.
+
+- **Theme support** (config key `theme`: `dark` | `light` | `auto`, default: `dark`).
+
+- **`scripts/update-v1.0.0.sh`** — tagged update script for v1.0.0. Sets the convention for future releases.
+
+- **`scripts/packages-v1.0.0.json`** — empty manifest.
+
+- New config keys: `theme`, `stream`, `experimentalActAsMcp`.
+
+### Changed
+
+- `devbuddy ask` now streams by default (was: spinner + full response).
+- Unified REPL chat mode now streams responses token-by-token.
+- `isAuthenticated()` returns true for ollama automatically.
+- `getActiveKey()` returns dummy "ollama" bearer for ollama.
+- `complete()` skips key check for ollama.
+- Help text rewritten for v1.0.0 — mentions streaming, ollama (no key), act-as-mcp, commit/review/doctor/history.
+- Auto-update check skips for the new interactive commands (act-as-mcp, commit, review, doctor, history).
+- `config list` shows new keys: `theme`, `stream`, `experimentalActAsMcp`.
+- `config reset` includes the new keys in the reset state.
+- README rewritten with v1.0.0 highlights, new Quick Start showing streaming + ollama + act-as-mcp, full sections for act-as-mcp and the new commands.
+
+### Tested
+
+- 18/18 act-as-MCP end-to-end tests pass (SSE server, tools/list, tools/call, initialize, all 12 tools exposed).
+- Doctor verified: correctly diagnoses 4 errors before onboarding, 0 after, warns about experimental flags.
+- Ollama auth fix verified: `isAuthenticated()` returns true, `auth status` shows ollama as authenticated.
+- act-as-mcp gate verified: refuses when disabled, runs with warning when enabled.
+- All old commands still work (backwards compat).
+
+### Stats
+
+- 50 files (was 42 in v0.5.5).
+- ~6800 lines of source (was ~5800).
+- Still only 2 runtime deps: `chalk`, `commander`.
+- Agent now has 13 built-in tools + any MCP tools + 12 tools exposed when running as an MCP server.
+
+---
+
 ## [0.5.5] — 2026-06-19
 
 ### Added

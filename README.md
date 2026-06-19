@@ -1,24 +1,28 @@
 # devbuddy
 
-> A minimal AI-powered CLI that helps developers — **just run `devbuddy`** to launch a unified chat + agent REPL. Multi-provider, **MCP server support**, sub-agents, DEVBUDDY.md context, **experimental remote-AI (SSH/Claude Desktop)**, dual-channel auto-update. Inspired by Gemini CLI, Qwen CLI, OpenClaude, Hermes, Aider, Cline — still smaller than all of them.
+> **v1.0.0** — AI-powered dev CLI with unified chat + agent REPL, **streaming responses**, **DevBuddy as an MCP server**, **Ollama support (no API key needed)**, 9 providers, sub-agents, **commit/review/doctor** commands, and dual-channel auto-update. Inspired by Gemini CLI, Qwen CLI, OpenClaude, Hermes, Aider, Cline — still smaller than all of them.
 
-[![Version](https://img.shields.io/badge/version-0.5.5-cyan)](#)
+[![Version](https://img.shields.io/badge/version-1.0.0-cyan)](#)
 [![License](https://img.shields.io/badge/license-MIT-blue)](#)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-green)](#)
 
 ---
 
-## What's new in v0.5.5
+## 🎉 v1.0.0 — Major release
 
-- 🔌 **MCP server support** (`devbuddy mcp`) — connect to any Model Context Protocol server. Both stdio (local commands) and HTTP/SSE (remote) transports. MCP tools are auto-discovered and exposed to the agent as `mcp_<server>_<tool>`.
-- 🧪 **Experimental remote-AI connector** (`devbuddy remote`) — for users without local API keys. Connect to a remote AI via SSH (any remote machine running `devbuddy-agent`) or Claude Desktop (local MCP). Gated by `experimentalRemoteAI: true` config.
-- 🔧 **5 new agent tools** from other harnesses:
-  - `grep_search` — search file contents with regex (from Hermes)
-  - `web_fetch` — fetch a URL and return text (from Hermes)
-  - `memory_update` — append to `.devbuddy/memory.md` (from Cline)
-  - `git_diff` — show unstaged/staged git diff (from Aider)
-  - `tree` — show directory tree, depth-limited (from Claude Code)
-- 📜 **v0.5.5 update script** — `scripts/update-v0.5.5.sh` for the dual-channel auto-updater.
+- 📡 **DevBuddy as an MCP server** (`devbuddy act-as-mcp`) — expose DevBuddy's capabilities (chat, file ops, shell, todos, config) as MCP tools. Other MCP clients (Claude Desktop, etc.) can connect via SSE or stdio.
+- 🌊 **Streaming responses** — `devbuddy ask` and the unified REPL now stream tokens as they arrive (uses OpenAI-compatible SSE). Anthropic/Cohere fall back to simulated streaming.
+- 🦙 **Ollama auth fix** — Ollama no longer requires an API key. `isAuthenticated()` returns true for ollama automatically. Use it locally with zero setup.
+- 📝 **`devbuddy commit`** — generate conventional commit messages from staged/unstaged git diff. Optional `--apply` to commit directly.
+- 🔍 **`devbuddy review`** — AI code review on staged/unstaged changes or a specific commit. Streaming output.
+- 🩺 **`devbuddy doctor`** — diagnose setup issues (Node version, config, API keys, MCP, network, git, experimental flags).
+- 📜 **`devbuddy history`** — show command history across sessions (`--grep <pattern>`, `--clear`).
+- 🎨 **Theme support** — `config set theme dark|light|auto`.
+- 📜 **`scripts/update-v1.0.0.sh`** — tagged update script for the dual-channel auto-updater.
+
+## What was new in v0.5.5
+
+- 🔌 **MCP server support**, 🧪 **experimental remote-AI (SSH/Claude)**, 🔧 **5 new agent tools** (grep_search, web_fetch, memory_update, git_diff, tree).
 
 ## What was new in v0.5.1
 
@@ -53,7 +57,7 @@ npm install -g TheStrongestOfTomorrow/DevBuddy-CLI
 ### Requirements
 
 - **Node.js >= 18** (uses native `fetch`)
-- An API key for one of the supported providers (HuggingFace and Groq have free tiers — recommended for trying it out)
+- An API key for one of the supported providers (HuggingFace and Groq have free tiers — recommended for trying it out). **Ollama needs no key** if you want to run fully locally.
 
 ---
 
@@ -65,20 +69,29 @@ npm install -g TheStrongestOfTomorrow/DevBuddy-CLI
 # 2. Onboard (one time, ~1 min)
 devbuddy onboard
 
-# 3. Just run devbuddy — launches unified chat + agent REPL
+# 3. Just run devbuddy — launches unified chat + agent REPL (streaming)
 devbuddy
-# > hello!                    # chat mode by default
+# > hello!                    # chat mode, tokens stream as they arrive
 # ai · Hi there! How can I help?
 # > /agent                    # switch to agent mode
 # [agent] > add a hello world route to app.js
-# [agent] > /chat             # switch back to chat
+# [agent] > /chat             # switch back
 # > /exit
 
-# 4. Or launch directly in agent mode
-devbuddy --agent
+# 4. One-shot commands (all streaming)
+devbuddy ask "what is a closure?"
+devbuddy commit               # generate commit message from git diff
+devbuddy review               # AI code review on staged changes
+devbuddy doctor               # diagnose setup issues
 
-# 5. Add project context
-devbuddy init         # creates DEVBUDDY.md template
+# 5. Ollama (no API key needed!)
+devbuddy onboard              # pick ollama, no key needed
+devbuddy ask "hello"          # uses local ollama
+
+# 6. DevBuddy as an MCP server (experimental)
+devbuddy config set experimentalActAsMcp true
+devbuddy act-as-mcp           # starts SSE server on :8765
+# Other MCP clients can now connect to http://127.0.0.1:8765/sse
 ```
 
 ---
@@ -333,6 +346,91 @@ devbuddy remote status
 - SSH: prompts are sent to the remote machine in plaintext over SSH. Make sure you trust the remote.
 - Claude Desktop: requires Claude Desktop installed and configured to expose a chat tool via MCP.
 - This feature is experimental and may change or be removed in future versions.
+
+---
+
+## DevBuddy as an MCP server (experimental)
+
+Run DevBuddy itself as an MCP server. Other MCP clients (Claude Desktop, etc.) can connect and use DevBuddy's capabilities.
+
+### Enable (gated)
+
+```bash
+devbuddy config set experimentalActAsMcp true
+```
+
+### Run as SSE server (HTTP)
+
+```bash
+devbuddy act-as-mcp                              # default: SSE on :8765
+devbuddy act-as-mcp --port 9000 --host 0.0.0.0   # custom port/host
+```
+
+Other MCP clients connect to `http://127.0.0.1:8765/sse`.
+
+### Run as stdio server
+
+```bash
+devbuddy act-as-mcp --transport stdio
+```
+
+Launched by another MCP client (e.g., Claude Desktop config) — communicates via stdin/stdout.
+
+### Exposed tools (12)
+
+| Tool | Description |
+|------|-------------|
+| `chat` | Forward a prompt to DevBuddy's configured AI provider |
+| `read_file` | Read a file (CWD-scoped) |
+| `write_file` | Write a file |
+| `edit_file` | Find-and-replace in a file |
+| `list_files` | List directory contents |
+| `grep_search` | Regex search of file contents |
+| `glob_search` | Find files by pattern |
+| `run_shell` | Run a shell command |
+| `list_todos` | List DevBuddy todos |
+| `add_todo` | Add a todo |
+| `done_todo` | Mark a todo as done |
+| `get_config` | Get current config (keys masked) |
+
+---
+
+## New v1.0 commands
+
+### `devbuddy commit`
+Generate a conventional commit message from staged changes.
+
+```bash
+devbuddy commit                  # show suggested message
+devbuddy commit --apply          # commit with the message (after confirm)
+devbuddy commit --unstaged       # use unstaged changes
+```
+
+### `devbuddy review`
+AI code review on a diff (streaming output).
+
+```bash
+devbuddy review                  # review staged changes
+devbuddy review --unstaged       # review unstaged
+devbuddy review --commit HEAD~1  # review a specific commit
+```
+
+### `devbuddy doctor`
+Diagnose setup issues.
+
+```bash
+devbuddy doctor                  # checks Node, config, keys, MCP, network, git
+```
+
+### `devbuddy history`
+Show command history.
+
+```bash
+devbuddy history                 # last 20 commands
+devbuddy history -n 50           # last 50
+devbuddy history --grep "agent"  # filter
+devbuddy history --clear         # clear history
+```
 
 ---
 

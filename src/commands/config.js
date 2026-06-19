@@ -9,11 +9,14 @@ const KNOWN_KEYS = [
   ["language",        "Preferred output language for ask/explain/translate (e.g. 'en', 'zh')."],
   ["translateTo",     "Default target language for `devbuddy translate`."],
   ["summarizeStyle",  "bullets | paragraphs | tldr."],
+  ["theme",           "dark | light | auto (default: dark)."],
+  ["stream",          "true/false — stream AI responses (default: true)."],
   ["agentEnabled",    "true/false — master toggle for agentic mode."],
   ["agentYolo",       "true/false — skip agent confirmations (DANGEROUS)."],
   ["agentMaxSteps",   "Max tool-call steps per agent run (default 20)."],
   ["autoUpdate",      "off | prompt | silent (default: prompt)."],
-  ["experimentalRemoteAI", "true/false — enable experimental remote-AI connector (SSH/Claude). ⚠️"],
+  ["experimentalRemoteAI", "true/false — enable experimental remote-AI (SSH/Claude). ⚠️"],
+  ["experimentalActAsMcp", "true/false — enable experimental act-as-MCP server. ⚠️"],
   ["onboardingComplete", "true/false — whether onboarding has been completed."],
 ];
 
@@ -90,11 +93,15 @@ export function register(program) {
         language: "en",
         translateTo: "en",
         summarizeStyle: "bullets",
+        theme: "dark",
         agentEnabled: false,
         agentMaxSteps: 20,
         agentYolo: false,
+        stream: true,
         autoUpdate: "prompt",
         lastUpdateCheck: null,
+        experimentalRemoteAI: false,
+        experimentalActAsMcp: false,
         createdAt: new Date().toISOString(),
       });
       ui.ok("config reset. run `devbuddy onboard` to set up again.");

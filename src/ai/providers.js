@@ -179,7 +179,11 @@ export function getActiveKey() {
   const provider = getActiveProvider();
   const id = getActiveProviderId();
   const stored = cfg.providers && cfg.providers[id] && cfg.providers[id].apiKey;
-  return stored || process.env[provider.envVar] || (id === "ollama" ? "ollama" : "");
+  // Ollama runs locally and typically needs no API key.
+  // Use a dummy bearer so the Authorization header is present (some HTTP
+  // libraries reject requests without it).
+  if (id === "ollama") return stored || "ollama";
+  return stored || process.env[provider.envVar] || "";
 }
 
 export function getActiveModel() {
@@ -192,6 +196,9 @@ export function getActiveModel() {
 }
 
 export function isAuthenticated() {
+  const id = getActiveProviderId();
+  // Ollama never requires a key — it runs locally.
+  if (id === "ollama") return true;
   return Boolean(getActiveKey());
 }
 
@@ -396,6 +403,113 @@ export async function completeWithRetry(userPrompt, opts = {}, retries = 2) {
     }
   }
   throw lastErr;
+}
+
+/**
+ * Stream a chat completion. Calls opts.onToken(text) for each chunk.
+ * Falls back to non-streaming + simulated chunking for providers that
+ * don't support SSE streaming.
+ * @returns {Promise<string>} full text
+ */
+export async function completeStream(userPrompt, opts = {}) {
+  const provider = getActiveProvider();
+  const key = getActiveKey();
+  const model = opts.model || getActiveModel();
+  const onToken = opts.onToken || (() => {});
+
+  if (!key && provider.id !== "ollama") {
+    throw new Error(
+      `No API key configured for ${provider.name}.\n` +
+      `  Get one at: ${provider.getKeyUrl}\n` +
+      `  Then run: devbuddy onboard   (or)   devbuddy auth set <key>`
+    );
+  }
+
+  // For now, all providers use the OpenAI-compatible streaming format
+  // (Anthropic and Cohere fall back to non-streaming + simulated chunking).
+  if (provider.type === "anthropic" || provider.type === "cohere") {
+    // Fallback: get full response, then emit in chunks
+    const full = await complete(userPrompt, opts);
+    const words = full.split(/(\s+)/);
+    for (const w of words) {
+      onToken(w);
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    return full;
+  }
+
+  // OpenAI-compatible streaming
+  const messages = opts.messages
+    ? opts.messages
+    : [
+        ...(opts.system ? [{ role: "system", content: opts.system }] : []),
+        { role: "user", content: userPrompt },
+      ];
+
+  const url = provider.baseUrl + "/chat/completions";
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${key}`,
+  };
+  if (provider.id === "openrouter") {
+    headers["HTTP-Referer"] = "https://github.com/TheStrongestOfTomorrow/DevBuddy-CLI";
+    headers["X-Title"] = "DevBuddy-CLI";
+  }
+  const body = {
+    model,
+    messages,
+    max_tokens: opts.maxTokens ?? 1024,
+    temperature: opts.temperature ?? 0.7,
+    stream: true,
+  };
+
+  const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
+
+  if (res.status === 429) {
+    const retryAfter = res.headers.get("retry-after");
+    const err = new Error(
+      retryAfter
+        ? `${provider.name} rate limit hit (429). Try again in ${retryAfter}s.`
+        : `${provider.name} rate limit hit (429). Try again later.`
+    );
+    err.code = "RATE_LIMITED";
+    throw err;
+  }
+  if (res.status === 401 || res.status === 403) {
+    throw new Error(`${provider.name} rejected your API key (HTTP ${res.status}).`);
+  }
+  if (!res.ok) {
+    throw new Error(`${provider.name} API error (HTTP ${res.status})`);
+  }
+
+  // Parse SSE stream
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  let full = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const lines = buf.split("\n");
+    buf = lines.pop() || "";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || !trimmed.startsWith("data:")) continue;
+      const data = trimmed.slice(5).trim();
+      if (data === "[DONE]") continue;
+      try {
+        const json = JSON.parse(data);
+        const delta = json.choices?.[0]?.delta?.content;
+        if (delta) {
+          full += delta;
+          onToken(delta);
+        }
+      } catch {}
+    }
+  }
+  return full;
 }
 
 let _warnedThisSession = false;

@@ -29,6 +29,11 @@ import { register as registerUpdate }     from "./commands/update.js";
 import { register as registerInit }       from "./commands/init.js";
 import { register as registerMcp }        from "./commands/mcp.js";
 import { register as registerRemote }     from "./commands/remote.js";
+import { register as registerActAsMcp }   from "./commands/act-as-mcp.js";
+import { register as registerCommit }     from "./commands/commit.js";
+import { register as registerReview }     from "./commands/review.js";
+import { register as registerDoctor }     from "./commands/doctor.js";
+import { register as registerHistory }    from "./commands/history.js";
 import { launchUnified }                  from "./commands/repl.js";
 
 // Commands that should NOT trigger the auto-update check (they're either
@@ -36,6 +41,7 @@ import { launchUnified }                  from "./commands/repl.js";
 // where an update prompt would interrupt the session).
 const SKIP_UPDATE_FOR = new Set([
   "onboard", "update", "auth", "config", "todo", "chat", "init", "help", "mcp", "remote",
+  "act-as-mcp", "commit", "review", "doctor", "history",
   undefined, // no command → launches unified REPL
 ]);
 
@@ -45,27 +51,32 @@ export function run() {
   program
     .name("devbuddy")
     .description(
-      "A minimal AI-powered CLI that helps developers.\n\n" +
-      "  devbuddy                Launch unified chat + agent REPL (type /agent to switch modes).\n" +
+      "DevBuddy v1.0 — AI-powered dev CLI.\n\n" +
+      "  devbuddy                Launch unified chat + agent REPL (streaming responses).\n" +
       "  devbuddy --agent        Launch directly in agent mode.\n" +
       "  onboard                 One-time setup wizard (REQUIRED before AI commands).\n" +
-      "  init                    Create a DEVBUDDY.md template (project context for AI).\n" +
-      "  ask                     Ask a question, get an AI answer (one-shot).\n" +
-      "  summarize               Condense a file or stdin into key points.\n" +
+      "  ask                     Ask a question (streaming by default).\n" +
+      "  summarize               Condense a file or stdin.\n" +
       "  explain                 Explain code in plain language.\n" +
-      "  translate               Translate text to another language.\n" +
+      "  translate               Translate text.\n" +
       "  chat                    Multi-message chat (alias for `devbuddy`).\n" +
-      "  agent                   Agentic harness — read/write/edit files, run shell.\n" +
-      "  mcp                     Manage MCP (Model Context Protocol) servers.\n" +
-      "  remote                  ⚠️ Experimental: connect to a remote AI (SSH or Claude Desktop).\n" +
-      "  todo                    Manage quick todos with priorities.\n" +
+      "  agent                   Agentic harness — file ops, shell, sub-agents, MCP.\n" +
+      "  commit                  Generate conventional commit message from git diff.\n" +
+      "  review                  AI code review on a diff or commit.\n" +
+      "  doctor                  Diagnose setup issues.\n" +
+      "  history                 Show command history.\n" +
+      "  init                    Create a DEVBUDDY.md template.\n" +
+      "  mcp                     Manage MCP servers (connect to external MCP servers).\n" +
+      "  act-as-mcp              ⚠️ Run DevBuddy itself as an MCP server.\n" +
+      "  remote                  ⚠️ Experimental remote-AI (SSH / Claude Desktop).\n" +
+      "  todo                    Manage quick todos.\n" +
       "  auth                    Manage API keys across providers.\n" +
-      "  config                  View and edit persistent settings.\n" +
+      "  config                  View and edit settings.\n" +
       "  update                  Check for and install updates.\n\n" +
-      "Providers: HuggingFace (free) · OpenAI · Anthropic · Groq (free) · OpenRouter · Ollama (local) · Together · Mistral · Cohere\n" +
+      "Providers: HuggingFace (free) · OpenAI · Anthropic · Groq (free) · OpenRouter · Ollama (local, no key) · Together · Mistral · Cohere\n" +
       "Project context: ./DEVBUDDY.md → ~/.devbuddy/DEVBUDDY.md\n" +
-      "MCP: ~/.devbuddy/mcp.json | ./.devbuddy/mcp.json | config.json `mcp` section\n" +
-      "Storage: ~/.devbuddy/  (config.json, chats/, todos.json)"
+      "MCP: ~/.devbuddy/mcp.json | ./.devbuddy/mcp.json\n" +
+      "Storage: ~/.devbuddy/  (config.json, chats/, todos.json, history.jsonl)"
     )
     .version(getVersion(), "-v, --version")
     .helpOption("-h, --help", "Show this help.")
@@ -103,6 +114,11 @@ export function run() {
   registerInit(program);
   registerMcp(program);
   registerRemote(program);
+  registerActAsMcp(program);
+  registerCommit(program);
+  registerReview(program);
+  registerDoctor(program);
+  registerHistory(program);
 
   // Note: no need for "show help if no command given" — the default action
   // on the program itself launches the unified REPL when no subcommand matches.

@@ -8,7 +8,7 @@ function ensureDir() {
   if (!existsSync(APP_DIR)) mkdirSync(APP_DIR, { recursive: true });
 }
 
-// --- Config (v0.3 schema) ---
+// --- Config (v1.0 schema) ---
 const DEFAULT_CONFIG = {
   // Onboarding state
   onboardingComplete: false,
@@ -23,14 +23,24 @@ const DEFAULT_CONFIG = {
   translateTo: "en",
   summarizeStyle: "bullets",
 
+  // Theme: 'dark' (default) | 'light' | 'auto'
+  theme: "dark",
+
   // Agent
   agentEnabled: false,           // master toggle for agentic mode
   agentMaxSteps: 20,
   agentYolo: false,              // skip confirms (DANGEROUS)
 
+  // Streaming
+  stream: true,                  // stream AI responses by default
+
   // Auto-update: 'off' | 'prompt' (default) | 'silent'
   autoUpdate: "prompt",
   lastUpdateCheck: null,
+
+  // Experimental features (gated)
+  experimentalRemoteAI: false,   // SSH / Claude Desktop remote connector
+  experimentalActAsMcp: false,   // run devbuddy as an MCP server
 
   createdAt: null,
 };

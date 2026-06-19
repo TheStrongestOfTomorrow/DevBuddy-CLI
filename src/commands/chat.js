@@ -25,10 +25,11 @@
 //   /context           show DEVBUDDY.md path being used (if any)
 
 import { createChat, getChat, saveChat, appendMessage, listChats, deleteChat, branchChat, exportChatAsMarkdown } from "../chat/store.js";
-import { complete, isOnboarded, isAuthenticated, getActiveProvider, getActiveModel, warnRateLimit } from "../ai/providers.js";
+import { complete, isOnboarded, isAuthenticated, getActiveProvider, getActiveModel, warnRateLimit, PROVIDERS, PROVIDER_IDS, getActiveProviderId } from "../ai/providers.js";
 import { loadDevbuddyMd, findDevbuddyMd, systemPromptSuffix } from "../prompt.js";
 import { loadConfig, saveConfig } from "../store.js";
 import { writeFileSync } from "node:fs";
+import { readlineWithSuggest, SLASH_COMMANDS } from "../ui/suggest.js";
 import * as ui from "../ui.js";
 
 function requireOnboarding() {
@@ -44,6 +45,8 @@ function requireOnboarding() {
 }
 
 // --- Minimal stdin line reader (no deps) ---
+// (Used for non-suggest prompts like onboarding. The chat REPL uses
+// readlineWithSuggest from src/ui/suggest.js instead.)
 
 function readline(prompt) {
   return new Promise((resolve) => {
@@ -68,20 +71,31 @@ function estimateTokens(messages) {
   return Math.ceil(chars / 4);
 }
 
+function renderWelcome(chat, { model, devbuddyMd, cfg }) {
+  ui.blank();
+  // Gemini-CLI-style banner
+  ui.title("╭─ devbuddy chat ──────────────────────");
+  ui.muted(`│`);
+  ui.muted(`│  chat:   ${chat.title}`);
+  ui.muted(`│  id:     ${chat.id}`);
+  ui.muted(`│  scope:  ${chat.scope}${chat.scopePath ? ` (${chat.scopePath})` : ""}`);
+  ui.muted(`│  model:  ${model}`);
+  ui.muted(`│  prov:   ${cfg.provider || "(none)"}`);
+  if (devbuddyMd) {
+    ui.muted(`│  ctx:    ${devbuddyMd.path}`);
+  }
+  ui.muted(`│`);
+  ui.muted(`│  type your message. Tab/→ to accept suggestion. /help for commands.`);
+  ui.muted("╰────────────────────────────────────────");
+  ui.blank();
+}
+
 function renderHelp() {
   ui.blank();
   ui.heading("slash commands");
-  ui.bullet("/help                show this help");
-  ui.bullet("/exit, /quit         save and exit");
-  ui.bullet("/clear               clear screen");
-  ui.bullet("/save                force-save current chat");
-  ui.bullet("/summary             ask AI for a 1-paragraph summary of chat so far");
-  ui.bullet("/model <name>        switch model for subsequent turns");
-  ui.bullet("/system <text>       set/override system prompt (or '/system clear' to reset)");
-  ui.bullet("/branch              branch the chat at the current point");
-  ui.bullet("/title <text>        rename the chat");
-  ui.bullet("/history             show message count + tokens estimate");
-  ui.bullet("/context             show DEVBUDDY.md path being used");
+  for (const c of SLASH_COMMANDS) {
+    console.log(`  ${ui.theme.value(c.cmd.padEnd(12))} ${ui.theme.muted(c.desc)}`);
+  }
   ui.blank();
 }
 
@@ -95,14 +109,7 @@ async function runRepl({ chat, opts }) {
 
   warnRateLimit();
 
-  ui.blank();
-  ui.title(`devbuddy chat — ${chat.title}`);
-  ui.muted(`id: ${chat.id}  |  scope: ${chat.scope}  |  model: ${modelOverride}`);
-  if (devbuddyMd) {
-    ui.muted(`context: ${devbuddyMd.path}`);
-  }
-  ui.muted(`type /help for commands, /exit to quit`);
-  ui.blank();
+  renderWelcome(chat, { model: modelOverride, devbuddyMd, cfg });
 
   // Replay history if resuming
   if (chat.messages.length > 0) {
@@ -114,9 +121,18 @@ async function runRepl({ chat, opts }) {
     ui.blank();
   }
 
+  // History for suggestions (user messages only)
+  const history = chat.messages.filter((m) => m.role === "user").map((m) => m.content);
+
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const input = await readline(ui.theme.accent("> ") + ui.theme.muted(""));
+    const input = await readlineWithSuggest(ui.theme.accent("> ") + ui.theme.muted(""), history);
+    if (input === null) {
+      // Ctrl-C / Ctrl-D
+      saveChat(chat);
+      ui.ok("chat saved. bye.");
+      return;
+    }
     const trimmed = input.trim();
 
     if (trimmed === "") continue;
@@ -139,11 +155,18 @@ async function runRepl({ chat, opts }) {
 
         case "clear":
           console.clear();
+          renderWelcome(chat, { model: modelOverride, devbuddyMd, cfg });
           continue;
 
         case "save":
           saveChat(chat);
           ui.ok(`saved (${chat.messages.length} messages).`);
+          continue;
+
+        case "reset":
+          chat.messages = [];
+          saveChat(chat);
+          ui.ok("conversation history cleared (chat kept).");
           continue;
 
         case "summary": {
@@ -207,10 +230,34 @@ async function runRepl({ chat, opts }) {
           continue;
         }
 
+        case "cost": {
+          const tokens = estimateTokens(chat.messages);
+          ui.muted(`est. tokens: ~${tokens}  |  est. cost: $${(tokens * 0.000005).toFixed(4)} (rough)`);
+          continue;
+        }
+
         case "context": {
           const f = findDevbuddyMd();
           if (f) ui.muted(`using: ${f.path} (${f.source})`);
           else ui.muted("no DEVBUDDY.md found in CWD or ~/.devbuddy/.");
+          continue;
+        }
+
+        case "agents": {
+          ui.heading("available sub-agent models");
+          const activeId = getActiveProviderId();
+          for (const id of PROVIDER_IDS) {
+            const p = PROVIDERS[id];
+            const hasKey = cfg.providers?.[id]?.apiKey;
+            const mark = id === activeId ? ui.theme.ok("→") : " ";
+            const key = hasKey ? ui.theme.ok("✓") : ui.theme.muted("·");
+            const tag = p.free ? ui.theme.ok("(free)") : ui.theme.muted("(paid)");
+            console.log(`  ${mark} ${key} ${id.padEnd(12)} ${tag} ${p.name}`);
+            ui.muted(`        models: ${p.models.slice(0, 3).join(", ")}${p.models.length > 3 ? "…" : ""}`);
+          }
+          ui.blank();
+          ui.muted("Sub-agents use the active provider by default; override with --model.");
+          ui.muted("In agent mode, the main agent can call: TOOL: agent  {\"task\": \"...\"}  END_TOOL");
           continue;
         }
 
@@ -222,14 +269,15 @@ async function runRepl({ chat, opts }) {
 
     // --- Regular message ---
     appendMessage(chat, "user", trimmed);
+    history.push(trimmed);
 
     // Build system prompt
     const baseSystem = systemOverride ||
       `You are a helpful, concise developer assistant. Answer in ${cfg.language}. ` +
       `Use code blocks when useful.` + systemPromptSuffix();
 
-    // Build messages array (cap history to last 20 to stay under token limits)
-    const history = chat.messages.slice(-20).map((m) => ({
+    // Build messages array (cap history to last 20)
+    const convo = chat.messages.slice(-20).map((m) => ({
       role: m.role,
       content: m.content,
     }));
@@ -241,7 +289,7 @@ async function runRepl({ chat, opts }) {
       const reply = await complete(null, {
         messages: [
           { role: "system", content: baseSystem },
-          ...history,
+          ...convo,
         ],
         model: modelOverride,
         maxTokens: 1024,
@@ -255,8 +303,6 @@ async function runRepl({ chat, opts }) {
     } catch (e) {
       spinner.fail();
       ui.error(e?.message || String(e));
-      // Roll back the user message we just appended so the chat doesn't have
-      // a dangling user turn with no reply.
       chat.messages.pop();
       saveChat(chat);
     }

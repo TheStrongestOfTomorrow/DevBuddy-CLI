@@ -1,0 +1,9 @@
+{
+  "_comment": "DevBuddy integration packages manifest. The auto-updater installs these when updating to a version that references this file. Edit per-release as needed.",
+  "_format": {
+    "packages": ["pkg-name", { "name": "pkg-name", "reason": "why we install it" }],
+    "integrations": ["shell command to run after install"]
+  },
+  "packages": [],
+  "integrations": []
+}

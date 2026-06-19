@@ -128,6 +128,57 @@ export function register(program) {
       const model = provider.models[modelIdx];
       setProviderModel(providerId, model);
 
+      // --- Step 3b: multi-key loop — add more providers? ---
+      ui.blank();
+      ui.heading("Step 3b: add more providers? (optional)");
+      ui.muted("  You can add more API keys now to switch between providers later.");
+      ui.muted("  Useful for using a free provider for chat and a paid one for the agent.");
+      ui.blank();
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const more = await prompt("  Add another provider? [y/N] ", "n");
+        if (!/^\s*y(es)?\s*$/i.test(more)) break;
+
+        // Pick another provider (exclude ones already configured with a key)
+        const cfg2 = loadConfig();
+        const remaining = PROVIDER_IDS.filter((id) => id !== providerId && !cfg2.providers?.[id]?.apiKey);
+        if (remaining.length === 0) {
+          ui.muted("  All providers are configured. Moving on.");
+          break;
+        }
+        const moreOptions = remaining.map((id) => {
+          const p = PROVIDERS[id];
+          return { label: `${p.name}${p.free ? " (free)" : ""}`, desc: p.notes };
+        });
+        const moreIdx = await pickFromList("  Pick provider to add", moreOptions, 0);
+        const moreId = remaining[moreIdx];
+        const moreProvider = PROVIDERS[moreId];
+
+        ui.muted(`    ${moreProvider.notes}`);
+        ui.muted(`    Sign up: ${moreProvider.signupUrl}`);
+        ui.muted(`    Get a key: ${moreProvider.getKeyUrl}`);
+        let moreKey;
+        if (moreId === "ollama") {
+          moreKey = "ollama";
+          ui.ok("    Ollama needs no key.");
+        } else {
+          moreKey = await prompt(`    Paste ${moreProvider.name} API key: `);
+          if (!moreKey) { ui.warn("    skipped."); continue; }
+          moreKey = moreKey.trim();
+        }
+        setProviderKey(moreId, moreKey);
+
+        // Pick model for this provider
+        const moreModels = moreProvider.models.map((m) => ({ label: m }));
+        const moreModelIdx = await pickFromList(
+          `    Pick model for ${moreProvider.name}`,
+          moreModels,
+          Math.max(0, moreProvider.models.indexOf(moreProvider.defaultModel))
+        );
+        setProviderModel(moreId, moreProvider.models[moreModelIdx]);
+        ui.ok(`    ${moreProvider.name} configured.`);
+      }
+
       // --- Step 4: language ---
       const langOptions = [
         { label: "English", desc: "default" },

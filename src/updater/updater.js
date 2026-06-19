@@ -1,15 +1,22 @@
-// Auto-updater — checks GitHub releases on launch, prompts to install.
+// Auto-updater v0.5 — dual-channel.
 //
-// v0.3 behavior: by default, checks once per launch (silently in background).
-// If a newer version exists, prints a one-line notice and prompts the user
-// to update (Y/n). If they accept, runs `npm install -g` from GitHub.
+// Primary: fetch the tagged update script from GitHub
+//   URL pattern: https://raw.githubusercontent.com/<repo>/main/scripts/update-v<version>.sh
+//   Tag convention: scripts/update-v0.5.0.sh, scripts/update-v0.5.1.sh, etc.
+//   Each script handles the full update including optional package installs.
 //
-// Configurable via:
-//   devbuddy config set autoUpdate off|prompt|silent
+// Fallback: if the .sh script 404s, fall back to GitHub releases:
+//   npm install -g <repo>@<version>
 //
-// Off     = don't check
-// Prompt  = check, prompt, install if yes  (DEFAULT)
-// Silent  = check, install silently if newer
+// Package integration: each release can include a `packages.json` manifest
+// listing extra npm packages to install and integrate. The .sh script
+// typically handles this, but if we're using the releases fallback, we
+// fetch the manifest separately and install the packages.
+//
+// Modes (config.autoUpdate):
+//   off    = don't check
+//   prompt = check, ask Y/n before installing (DEFAULT)
+//   silent = check, install without asking
 
 import { execSync } from "node:child_process";
 import { loadConfig, saveConfig } from "../store.js";
@@ -17,11 +24,10 @@ import * as ui from "../ui.js";
 import { getVersion } from "../ui.js";
 
 const REPO = "TheStrongestOfTomorrow/DevBuddy-CLI";
+const RAW_BASE = `https://raw.githubusercontent.com/${REPO}/main`;
 const RELEASES_URL = `https://api.github.com/repos/${REPO}/releases/latest`;
-const INSTALL_CMD = `npm install -g ${REPO}`;
+const INSTALL_CMD_FALLBACK = `npm install -g ${REPO}`;
 
-// Cache the last check time so we don't hit GitHub on every single command
-// (only on the first launch per hour).
 const ONE_HOUR_MS = 60 * 60 * 1000;
 
 function shouldCheck(cfg) {
@@ -32,7 +38,6 @@ function shouldCheck(cfg) {
 }
 
 function cmpVersions(a, b) {
-  // Returns positive if a > b, negative if a < b, 0 if equal.
   const pa = a.replace(/^v/, "").split(".").map((n) => parseInt(n, 10) || 0);
   const pb = b.replace(/^v/, "").split(".").map((n) => parseInt(n, 10) || 0);
   for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -45,10 +50,7 @@ function cmpVersions(a, b) {
 
 async function fetchLatestVersion() {
   const res = await fetch(RELEASES_URL, {
-    headers: {
-      "User-Agent": "DevBuddy-CLI",
-      "Accept": "application/vnd.github+json",
-    },
+    headers: { "User-Agent": "DevBuddy-CLI", "Accept": "application/vnd.github+json" },
     signal: AbortSignal.timeout(4000),
   });
   if (!res.ok) throw new Error(`GitHub API returned ${res.status}`);
@@ -60,13 +62,47 @@ async function fetchLatestVersion() {
   };
 }
 
-function runInstall() {
-  ui.muted(`  running: ${INSTALL_CMD}`);
+// Try to fetch the tagged .sh script for a given version.
+async function fetchUpdateScript(version) {
+  const url = `${RAW_BASE}/scripts/update-v${version}.sh`;
+  const res = await fetch(url, {
+    headers: { "User-Agent": "DevBuddy-CLI" },
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!res.ok) return null;
+  const text = await res.text();
+  // Validate it's a real shell script (starts with shebang or has # devbuddy-update tag)
+  if (!text.includes("#!") && !text.includes("# devbuddy-update")) return null;
+  return text;
+}
+
+// Fetch the packages.json manifest for a version (if it exists).
+async function fetchPackagesManifest(version) {
+  // Try release asset first, then raw on main
+  const urls = [
+    `${RAW_BASE}/scripts/packages-v${version}.json`,
+    `${RAW_BASE}/packages.json`,
+  ];
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, {
+        headers: { "User-Agent": "DevBuddy-CLI" },
+        signal: AbortSignal.timeout(4000),
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (data && Array.isArray(data.packages)) return data;
+    } catch {}
+  }
+  return null;
+}
+
+function runShell(cmd) {
   try {
-    execSync(INSTALL_CMD, { stdio: "inherit", timeout: 120_000 });
+    execSync(cmd, { stdio: "inherit", timeout: 120_000 });
     return true;
   } catch (e) {
-    ui.error(`update failed: ${e.message}`);
+    ui.error(`command failed: ${e.message}`);
     return false;
   }
 }
@@ -88,12 +124,34 @@ function prompt(question) {
   });
 }
 
+// Install extra packages from a manifest.
+function installManifestPackages(manifest) {
+  if (!manifest || !manifest.packages || manifest.packages.length === 0) return;
+  ui.blank();
+  ui.heading(`installing ${manifest.packages.length} integration package(s)`);
+  for (const pkg of manifest.packages) {
+    const name = typeof pkg === "string" ? pkg : pkg.name;
+    const reason = typeof pkg === "string" ? "" : (pkg.reason || "");
+    ui.muted(`  - ${name}${reason ? ` (${reason})` : ""}`);
+    const ok = runShell(`npm install -g ${name}`);
+    if (!ok) ui.warn(`    failed to install ${name}`);
+  }
+  if (manifest.integrations && manifest.integrations.length > 0) {
+    ui.blank();
+    ui.heading("running integration hooks");
+    for (const hook of manifest.integrations) {
+      ui.muted(`  $ ${hook}`);
+      runShell(hook);
+    }
+  }
+}
+
 /**
- * Check for updates. Called from the CLI entrypoint, non-blocking.
+ * Check for updates and optionally install.
  * @param {object} opts
- * @param {boolean} [opts.force]  bypass the 1-hour cache
- * @param {boolean} [opts.silent] don't prompt, just print notice if newer
- * @returns {Promise<{checked: boolean, latest?: string, current: string, updated?: boolean}>}
+ * @param {boolean} [opts.force]   bypass the 1-hour cache
+ * @param {boolean} [opts.silent]  don't prompt, just print notice if newer
+ * @returns {Promise<object>}
  */
 export async function checkForUpdates(opts = {}) {
   const cfg = loadConfig();
@@ -107,7 +165,6 @@ export async function checkForUpdates(opts = {}) {
     return { checked: false, current, reason: "checked recently" };
   }
 
-  // Mark check time
   cfg.lastUpdateCheck = new Date().toISOString();
   saveConfig(cfg);
 
@@ -142,10 +199,40 @@ export async function checkForUpdates(opts = {}) {
   const answer = await prompt("  Update now? [Y/n] ");
 
   if (answer === "" || answer === "y" || answer === "yes") {
-    const ok = runInstall();
+    // Try .sh script first (primary channel)
+    ui.muted(`  checking for update script…`);
+    const script = await fetchUpdateScript(latest.version);
+    if (script) {
+      ui.ok(`  found update-v${latest.version}.sh — running it.`);
+      // Write script to a temp file and execute
+      const { writeFileSync, unlinkSync } = await import("node:fs");
+      const { join } = await import("node:path");
+      const { tmpdir } = await import("node:os");
+      const tmpScript = join(tmpdir(), `devbuddy-update-${latest.version}.sh`);
+      writeFileSync(tmpScript, script, { mode: 0o755 });
+      const ok = runShell(`bash ${tmpScript} ${latest.version}`);
+      try { unlinkSync(tmpScript); } catch {}
+      if (ok) {
+        // Also install manifest packages (if any) — the .sh may have done this,
+        // but we check anyway to be safe.
+        const manifest = await fetchPackagesManifest(latest.version);
+        if (manifest) installManifestPackages(manifest);
+        ui.ok(`updated to v${latest.version}. Re-run your command.`);
+        return { checked: true, current, latest: latest.version, is_newer: true, updated: true, method: "script" };
+      }
+      ui.warn(`  .sh script failed. falling back to releases channel.`);
+    } else {
+      ui.muted(`  no update-v${latest.version}.sh found. using releases fallback.`);
+    }
+
+    // Fallback: npm install from releases
+    ui.muted(`  running: ${INSTALL_CMD_FALLBACK}`);
+    const ok = runShell(INSTALL_CMD_FALLBACK);
     if (ok) {
+      const manifest = await fetchPackagesManifest(latest.version);
+      if (manifest) installManifestPackages(manifest);
       ui.ok(`updated to v${latest.version}. Re-run your command.`);
-      return { checked: true, current, latest: latest.version, is_newer: true, updated: true };
+      return { checked: true, current, latest: latest.version, is_newer: true, updated: true, method: "releases" };
     }
     return { checked: true, current, latest: latest.version, is_newer: true, updated: false };
   } else {

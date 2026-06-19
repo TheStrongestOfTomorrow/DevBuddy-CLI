@@ -5,6 +5,72 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] — 2026-06-19
+
+### Added
+
+- **Inline auto-suggest** (`src/ui/suggest.js`). Fish-shell-style suggestions in the chat REPL:
+  - Slash commands (type `/` → shows matching commands)
+  - File completion (type a path or bare filename → auto-completes from CWD)
+  - History completion (type the start of a previous message → suggests the rest)
+  - Press **Tab** or **→** to accept. Ctrl-U clears the line. Ctrl-L clears the screen.
+  - Uses raw mode TTY input; falls back gracefully in non-TTY environments.
+
+- **Sub-agents** (`src/agent/subagent/`). The main agent can spawn focused sub-agents via the new `agent` tool:
+  - `agent` tool added to the main agent's tool registry (registered at module load via `registerSubAgentTool()`).
+  - Sub-agents have their own ~12-step loop, max 1500 tokens per turn.
+  - Sub-agents CANNOT call `agent` (no recursion) or `finish` (they use `return` instead).
+  - Sub-agents can use a different model via the `model` parameter (e.g., use a cheap fast model for research, expensive model for code generation).
+  - Sub-agents inherit the parent's allowlist (CWD + any `--allow` roots).
+  - Sub-agent mutations still prompt for confirmation (sub-agents always run with `yolo=false`).
+  - Box-drawing-bordered progress display shows sub-agent activity inline.
+
+- **Multi-key onboarding**. After the primary provider is configured, onboard asks "Add another provider? [y/N]" in a loop. Each additional provider gets its own key + model picker. Already-configured providers are excluded from the list.
+
+- **`devbuddy auth add <provider> <key>`** — add a key for another provider without re-onboarding. Options: `--model <name>`, `--switch` (switch active after adding).
+
+- **`devbuddy auth switch <provider>`** — instantly switch the active provider. Refuses if no key is set for the target (with a helpful "add one with: devbuddy auth add ..." message). Options: `--model <name>`.
+
+- **Post-install package integration**. Releases can ship a `packages.json` manifest at `scripts/packages-v<version>.json` (or top-level `packages.json`) listing extra npm packages to install + integration hooks to run. The updater fetches and applies it automatically after install.
+
+- **Dual-channel auto-update** (`src/updater/updater.js` rewritten):
+  - **Primary channel:** fetch `https://raw.githubusercontent.com/<repo>/main/scripts/update-v<version>.sh` and execute it with `bash`. Each version can have its own update script with version-specific migrations.
+  - **Fallback channel:** if the `.sh` script 404s, fall back to `npm install -g <repo>` from the latest GitHub release.
+  - Both channels run the packages manifest if one exists.
+
+- **`scripts/update-v0.5.0.sh`** — the first tagged update script. Sets the convention: each release ships a script at `scripts/update-v<version>.sh` that handles the full update for that version.
+
+- **`scripts/packages-v0.5.0.json`** — template manifest (empty for v0.5.0; future releases can add integration packages here).
+
+- **New chat slash commands:**
+  - `/reset` — clear conversation history (keeps the chat record)
+  - `/agents` — list all available sub-agent models with their providers + which have keys
+  - `/cost` — estimate tokens used + rough cost
+
+- **Gemini-CLI-inspired welcome banner** in chat REPL. Shows chat title, ID, scope, model, provider, and DEVBUDDY.md context path in a box-drawing-bordered panel.
+
+- `/clear` now re-renders the welcome banner (previously just cleared the screen).
+
+- Ctrl-C and Ctrl-D in chat REPL now save the chat and exit cleanly (previously could leave a dangling turn).
+
+### Changed
+
+- Chat REPL now uses `readlineWithSuggest()` from `src/ui/suggest.js` instead of the bare `readline()`. The bare `readline()` is kept for non-suggest prompts (onboarding, confirmations).
+- `toolsForPrompt()` in `src/agent/tools.js` now iterates `Object.keys(TOOLS)` dynamically so the `agent` tool appears in the system prompt.
+- Help text in chat now renders from the `SLASH_COMMANDS` constant (single source of truth).
+- Agent system prompt mentions sub-agents and the `agent` tool.
+
+### Inspired by
+
+- **Gemini CLI** — inline auto-suggest UX, welcome banner design, command palette feel
+- **Qwen CLI** — chat REPL layout, slash command discoverability
+- **OpenClaude** — sub-agent pattern (agent-as-tool)
+- **Hermes** — provider abstraction extended to sub-agent model overrides
+
+Core is now ~600 lines (up from ~400 in v0.4) with sub-agents + auto-suggest + multi-key. Still no external runtime deps beyond `chalk` and `commander`.
+
+---
+
 ## [0.4.0] — 2026-06-18
 
 ### Added

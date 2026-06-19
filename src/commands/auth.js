@@ -48,6 +48,48 @@ export function register(program) {
     });
 
   auth
+    .command("add <provider> <key>")
+    .description("Add an API key for another provider (without making it active).")
+    .option("--model <name>", "Also set the model for this provider.")
+    .option("--switch", "Switch active provider to this one after adding.")
+    .action(async (provider, key, opts) => {
+      if (!PROVIDERS[provider]) {
+        ui.error(`unknown provider '${provider}'. valid: ${PROVIDER_IDS.join(", ")}`);
+        process.exit(1);
+      }
+      key = (key || "").trim();
+      if (!key) { ui.error("key is required"); process.exit(1); }
+      setProviderKey(provider, key);
+      if (opts.model) setProviderModel(provider, opts.model);
+      if (opts.switch) setActiveProvider(provider);
+      ui.ok(`key added for ${PROVIDERS[provider].name}.`);
+      if (opts.switch) ui.muted(`  (now active)`);
+      else ui.muted(`  switch with: devbuddy auth switch ${provider}`);
+    });
+
+  auth
+    .command("switch <provider>")
+    .description("Switch the active provider without re-onboarding.")
+    .option("--model <name>", "Also change the model for this provider.")
+    .action((provider, opts) => {
+      if (!PROVIDERS[provider]) {
+        ui.error(`unknown provider '${provider}'. valid: ${PROVIDER_IDS.join(", ")}`);
+        process.exit(1);
+      }
+      const cfg = loadConfig();
+      if (!cfg.providers?.[provider]?.apiKey && provider !== "ollama") {
+        ui.error(`no key set for ${PROVIDERS[provider].name}.`);
+        ui.muted(`  add one with: devbuddy auth add ${provider} <key>`);
+        process.exit(1);
+      }
+      setActiveProvider(provider);
+      if (opts.model) setProviderModel(provider, opts.model);
+      ui.ok(`active provider: ${PROVIDERS[provider].name}`);
+      const m = opts.model || cfg.providers?.[provider]?.model || PROVIDERS[provider].defaultModel;
+      ui.muted(`  model: ${m}`);
+    });
+
+  auth
     .command("status")
     .description("Show active provider, key (masked), and model.")
     .action(() => {

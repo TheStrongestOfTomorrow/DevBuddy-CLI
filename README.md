@@ -1,23 +1,24 @@
 # devbuddy
 
-> A minimal AI-powered CLI that helps developers — multi-provider AI, persistent multi-message chat, agentic harness with planner mode + project memory, DEVBUDDY.md project context, scoped directory access, and auto-update. Inspired by OpenClaude, Hermes, Aider, and Cline — but still smaller than all of them.
+> A minimal AI-powered CLI that helps developers — multi-provider, multi-message chat with **inline auto-suggest**, agentic harness with **sub-agents** + planner mode + project memory, DEVBUDDY.md context, multi-key management, and **dual-channel auto-update** (.sh script + releases fallback). Inspired by Gemini CLI, Qwen CLI, OpenClaude, Hermes, Aider, and Cline — still smaller than all of them.
 
-[![Version](https://img.shields.io/badge/version-0.4.0-cyan)](#)
+[![Version](https://img.shields.io/badge/version-0.5.0-cyan)](#)
 [![License](https://img.shields.io/badge/license-MIT-blue)](#)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-green)](#)
 
 ---
 
-## What's new in v0.4.0
+## What's new in v0.5.0
 
-- 💬 **Multi-message chat** (`devbuddy chat`) — interactive REPL with persistent storage, slash commands, branching, and Markdown export. Global + per-project scopes.
-- 📝 **`DEVBUDDY.md` project context** — drop a `DEVBUDDY.md` in your project root and every AI command (ask, summarize, explain, translate, chat, agent) automatically includes it in the system prompt. Run `devbuddy init` to create a template.
-- 🎯 **Per-session directory grants** (`devbuddy agent run --allow <dir>`) — agent can be granted access to directories beyond CWD on a per-run basis.
-- 🧠 **Planner mode** (`devbuddy agent run --plan`) — agent writes a plan first, then executes step-by-step with progress display.
-- 🔄 **Auto-rollback** — if a tool fails mid-step, all mutations from that step are automatically rolled back.
-- ⚡ **Parallel reads** — agent can call multiple read-only tools (read_file, list_files, glob_search) in a single turn.
-- 💾 **Project memory** — agent reads `.devbuddy/memory.md` at the start of each run to remember what it did last time in this project.
-- 🔍 **`glob_search` tool** — agent can find files by pattern without running shell.
+- 🐟 **Inline auto-suggest** in the chat REPL — fish-shell style. Type `/` and commands suggest themselves; type a filename and it auto-completes from CWD; type the start of a previous message and history suggests the rest. Press **Tab** or **→** to accept.
+- 🤖 **Sub-agents** (`agent` tool) — the main agent can spawn focused sub-agents for subtasks, optionally with a different model. Sub-agents have their own tool loop (minus `agent` and `finish` to prevent recursion) and use a `return` tool to bubble results back.
+- 🔑 **Multi-key onboarding** — onboard now asks "add another provider?" in a loop. Configure multiple providers in one pass.
+- ➕ **`devbuddy auth add`** — add a key for another provider without re-onboarding.
+- 🔄 **`devbuddy auth switch`** — instantly switch the active provider (uses a key you already added).
+- 📦 **Post-install package integration** — releases can ship a `packages.json` manifest listing extra npm packages to auto-install + integration hooks to run.
+- 🛠️ **Dual-channel auto-update** — updater fetches a tagged `.sh` script (`scripts/update-v<version>.sh`) first, falls back to `npm install -g` from GitHub releases if the script is missing.
+- 💬 **New slash commands**: `/reset` (clear history, keep chat), `/agents` (list sub-agent models), `/cost` (token estimate).
+- 🎨 **Gemini-CLI-inspired welcome banner** in chat REPL.
 
 See [CHANGELOG.md](./CHANGELOG.md) for the full diff.
 

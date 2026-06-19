@@ -242,12 +242,45 @@ export const TOOLS = {
   },
 };
 
+// `agent` tool is added at runtime (in core.js) because it imports subagent
+// which imports tools.js — circular import. We register it as a function instead.
+export function registerSubAgentTool(subAgentRunner) {
+  TOOLS.agent = {
+    description: "Spawn a sub-agent to work on a focused subtask. Sub-agent has its own loop and tools (no agent/finish). Use for research, file analysis, or parallel independent subtasks. Sub-agent can use a different model if you specify one.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        task: { type: "string", description: "The focused subtask for the sub-agent." },
+        model: { type: "string", description: "Optional: model override for the sub-agent (e.g. 'gpt-4o-mini' or 'claude-3-5-haiku-20241022')." },
+        context: { type: "string", description: "Optional: extra context to pass to the sub-agent about the parent's goal." },
+      },
+      required: ["task"],
+    },
+    confirm: false,  // spawning is non-destructive; the sub-agent's own tool calls will prompt
+    run: async ({ task, model, context }) => {
+      const { runSubAgent } = await import("./subagent/index.js");
+      const { result } = await runSubAgent(task, {
+        model,
+        parentContext: context || "",
+        yolo: false, // sub-agent always confirms its own mutations
+        allow: [],   // inherits parent's allowlist via resetSession
+      });
+      return result;
+    },
+  };
+}
+
 export const TOOL_NAMES = Object.keys(TOOLS);
+
+// Get current tool names (including dynamically-registered ones like `agent`).
+export function getToolNames() {
+  return Object.keys(TOOLS);
+}
 
 // --- Tool spec for the system prompt ------------------------------------
 
 export function toolsForPrompt() {
-  return TOOL_NAMES.map((name) => {
+  return Object.keys(TOOLS).map((name) => {
     const t = TOOLS[name];
     const params = Object.entries(t.inputSchema.properties || {})
       .map(([k, v]) => `${k}: ${v.description || v.type}`)

@@ -18,11 +18,14 @@
 // Aider (auto-rollback), and Cline (planner mode + progress display).
 
 import { complete } from "../ai/providers.js";
-import { TOOLS, TOOL_NAMES, toolsForPrompt, executeTool, executeToolsParallel, resetSession, rollbackStep, clearBackups, getAllowedRoots } from "./tools.js";
+import { TOOLS, TOOL_NAMES, getToolNames, toolsForPrompt, executeTool, executeToolsParallel, resetSession, rollbackStep, clearBackups, getAllowedRoots, registerSubAgentTool } from "./tools.js";
 import { systemPromptSuffix, findDevbuddyMd } from "../prompt.js";
 import * as ui from "../ui.js";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+
+// Register the sub-agent tool once at module load.
+registerSubAgentTool();
 
 const MAX_STEPS_DEFAULT = 20;
 

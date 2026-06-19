@@ -27,13 +27,15 @@ import { register as registerConfig }     from "./commands/config.js";
 import { register as registerAgent }      from "./commands/agent.js";
 import { register as registerUpdate }     from "./commands/update.js";
 import { register as registerInit }       from "./commands/init.js";
+import { register as registerMcp }        from "./commands/mcp.js";
+import { register as registerRemote }     from "./commands/remote.js";
 import { launchUnified }                  from "./commands/repl.js";
 
 // Commands that should NOT trigger the auto-update check (they're either
 // meta-commands themselves, short offline operations, or interactive REPLs
 // where an update prompt would interrupt the session).
 const SKIP_UPDATE_FOR = new Set([
-  "onboard", "update", "auth", "config", "todo", "chat", "init", "help",
+  "onboard", "update", "auth", "config", "todo", "chat", "init", "help", "mcp", "remote",
   undefined, // no command → launches unified REPL
 ]);
 
@@ -44,7 +46,7 @@ export function run() {
     .name("devbuddy")
     .description(
       "A minimal AI-powered CLI that helps developers.\n\n" +
-      "  devbuddy                Launch unified chat + agent REPL (just type /agent to switch modes).\n" +
+      "  devbuddy                Launch unified chat + agent REPL (type /agent to switch modes).\n" +
       "  devbuddy --agent        Launch directly in agent mode.\n" +
       "  onboard                 One-time setup wizard (REQUIRED before AI commands).\n" +
       "  init                    Create a DEVBUDDY.md template (project context for AI).\n" +
@@ -54,12 +56,15 @@ export function run() {
       "  translate               Translate text to another language.\n" +
       "  chat                    Multi-message chat (alias for `devbuddy`).\n" +
       "  agent                   Agentic harness — read/write/edit files, run shell.\n" +
+      "  mcp                     Manage MCP (Model Context Protocol) servers.\n" +
+      "  remote                  ⚠️ Experimental: connect to a remote AI (SSH or Claude Desktop).\n" +
       "  todo                    Manage quick todos with priorities.\n" +
       "  auth                    Manage API keys across providers.\n" +
       "  config                  View and edit persistent settings.\n" +
       "  update                  Check for and install updates.\n\n" +
       "Providers: HuggingFace (free) · OpenAI · Anthropic · Groq (free) · OpenRouter · Ollama (local) · Together · Mistral · Cohere\n" +
       "Project context: ./DEVBUDDY.md → ~/.devbuddy/DEVBUDDY.md\n" +
+      "MCP: ~/.devbuddy/mcp.json | ./.devbuddy/mcp.json | config.json `mcp` section\n" +
       "Storage: ~/.devbuddy/  (config.json, chats/, todos.json)"
     )
     .version(getVersion(), "-v, --version")
@@ -96,6 +101,8 @@ export function run() {
   registerAgent(program);
   registerUpdate(program);
   registerInit(program);
+  registerMcp(program);
+  registerRemote(program);
 
   // Note: no need for "show help if no command given" — the default action
   // on the program itself launches the unified REPL when no subcommand matches.

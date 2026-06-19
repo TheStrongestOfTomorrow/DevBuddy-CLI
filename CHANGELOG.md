@@ -5,6 +5,56 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.5] — 2026-06-19
+
+### Added
+
+- **MCP (Model Context Protocol) server support** (`src/mcp/`). Connect devbuddy to any MCP server:
+  - **Both transports:** stdio (local commands like `npx -y @modelcontextprotocol/server-filesystem`) and HTTP/SSE (remote URLs).
+  - **Layered config:** `~/.devbuddy/mcp.json` (global) → `./.devbuddy/mcp.json` (project) → `config.json` `mcp` section (overrides files).
+  - **Auto-discovery:** at agent startup, devbuddy connects to all configured servers, calls `tools/list`, and registers each tool as `mcp_<server>_<tool>` in the agent's tool registry.
+  - **Lifecycle management:** servers are connected lazily on first call, disconnected at agent exit.
+  - New `devbuddy mcp` command with subcommands: `list`, `add`, `remove`, `test`, `tools`, `paths`.
+
+- **Experimental remote-AI connector** (`src/remote/`). For users without local API keys:
+  - **SSH connector** (`src/remote/ssh.js`): SSH to a remote machine running `devbuddy-agent` (or any stdin→stdout command), send prompts, stream responses. Supports `--port`, `--identity`, `--command` options. One-shot and interactive modes.
+  - **Claude Desktop connector** (`src/remote/claude-desktop.js`): talk to a local Claude Desktop instance via its MCP server. Auto-discovers the chat tool.
+  - **Hard gate:** disabled by default. Enable with `devbuddy config set experimentalRemoteAI true`. Shows a big ⚠️ warning every time it runs.
+  - New `devbuddy remote` command with subcommands: `ssh`, `ssh-test`, `claude`, `claude-test`, `status`.
+
+- **5 new agent tools** (from other open-source harnesses):
+  - `grep_search` — search file contents with regex. Uses ripgrep if available, falls back to grep. Parallel-safe. (From Hermes.)
+  - `web_fetch` — fetch a URL and return text (max 50KB). Parallel-safe. (From Hermes.)
+  - `memory_update` — append a note to `.devbuddy/memory.md`. Non-parallel-safe (writes). (From Cline.)
+  - `git_diff` — show unstaged or staged git diff. Optional `--staged` and `--path`. Parallel-safe. (From Aider.)
+  - `tree` — show directory tree, depth-limited (default 2, max 4). Tries `tree` command, falls back to `find`. Parallel-safe. (From Claude Code.)
+
+- **`scripts/update-v0.5.5.sh`** — tagged update script for v0.5.5. Sets the convention for future releases.
+
+- **`scripts/packages-v0.5.5.json`** — empty manifest (no extra packages auto-installed in this release).
+
+- New config key: `experimentalRemoteAI` (boolean, default false).
+
+### Changed
+
+- Agent now discovers and registers MCP tools at the start of each `runAgent` call. Tools appear in the system prompt automatically.
+- Agent disconnects all MCP servers at exit (cleanup).
+- `devbuddy config list` now shows the `experimentalRemoteAI` key.
+- Help text updated with `mcp` and `remote` commands.
+- Auto-update check skips for `mcp` and `remote` commands (interactive).
+
+### Inspired by
+
+- **Hermes** — `grep_search` and `web_fetch` tools, MCP-style provider abstraction
+- **Cline** — `memory_update` tool (persistent project memory)
+- **Aider** — `git_diff` tool
+- **Claude Code** — `tree` tool
+- **Model Context Protocol** — https://modelcontextprotocol.io
+
+Core is now ~5800 lines across 41 files. Still only 2 runtime deps (`chalk`, `commander`).
+
+---
+
 ## [0.5.1] — 2026-06-19
 
 ### Added

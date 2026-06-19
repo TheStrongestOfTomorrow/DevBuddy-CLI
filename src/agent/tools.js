@@ -175,13 +175,170 @@ export const TOOLS = {
     },
     parallelSafe: true,
     run: async ({ pattern }) => {
-      // Use find with -path for simplicity. Limit to allowed roots.
       try {
         const cmd = `find ${_allowedRoots.map((r) => `"${r}"`).join(" ")} -type f -path "*${pattern.replace(/["]/g, "")}*" 2>/dev/null | head -50`;
         const out = execSync(cmd, { encoding: "utf8", timeout: 10_000, maxBuffer: 200_000 });
         return out.trim() || "(no matches)";
       } catch (e) {
         return `(search failed: ${e.message})`;
+      }
+    },
+  },
+
+  grep_search: {
+    description: "Search file CONTENTS for a regex pattern. Returns matching lines with file:line prefixes. From Hermes.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pattern: { type: "string", description: "Regex pattern to search for." },
+        path: { type: "string", description: "Directory or file to search in (default: CWD)." },
+        glob: { type: "string", description: "Optional glob filter, e.g. '*.js'." },
+      },
+      required: ["pattern"],
+    },
+    parallelSafe: true,
+    run: async ({ pattern, path = ".", glob }) => {
+      const full = enforcePath(path);
+      try {
+        // Use ripgrep if available, else grep -r
+        let cmd = `rg --no-heading -n "${pattern.replace(/["`$\\]/g, "")}" "${full}"`;
+        if (glob) cmd += ` -g "${glob}"`;
+        cmd += ` 2>/dev/null | head -50`;
+        let out;
+        try {
+          out = execSync(cmd, { encoding: "utf8", timeout: 10_000, maxBuffer: 200_000 });
+        } catch {
+          // Fallback to grep
+          cmd = `grep -rn --include=${glob || "*"} "${pattern.replace(/["`$\\]/g, "")}" "${full}" 2>/dev/null | head -50`;
+          out = execSync(cmd, { encoding: "utf8", timeout: 10_000, maxBuffer: 200_000 });
+        }
+        return out.trim() || "(no matches)";
+      } catch (e) {
+        return `(grep failed: ${e.message})`;
+      }
+    },
+  },
+
+  web_fetch: {
+    description: "Fetch a URL and return the response body as text. Max 50KB. From Hermes.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "The URL to fetch." },
+        method: { type: "string", description: "HTTP method (default: GET)." },
+      },
+      required: ["url"],
+    },
+    parallelSafe: true,
+    run: async ({ url, method = "GET" }) => {
+      if (!/^https?:\/\//.test(url)) {
+        throw new Error("URL must start with http:// or https://");
+      }
+      try {
+        const res = await fetch(url, {
+          method,
+          signal: AbortSignal.timeout(10_000),
+          headers: { "User-Agent": "DevBuddy-CLI/0.5.5" },
+        });
+        if (!res.ok) return `HTTP ${res.status} ${res.statusText}`;
+        const text = await res.text();
+        if (text.length > 50_000) {
+          return text.slice(0, 50_000) + `\n... (truncated, ${text.length - 50_000} more chars)`;
+        }
+        return text;
+      } catch (e) {
+        return `(fetch failed: ${e.message})`;
+      }
+    },
+  },
+
+  memory_update: {
+    description: "Append a note to .devbuddy/memory.md (project memory). The note will be loaded on future agent runs in this project. From Cline.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        note: { type: "string", description: "The note to append." },
+      },
+      required: ["note"],
+    },
+    confirm: false, // appending memory is non-destructive
+    run: async ({ note }) => {
+      const memPath = join(process.cwd(), ".devbuddy", "memory.md");
+      mkdirSync(dirname(memPath), { recursive: true });
+      const ts = new Date().toISOString();
+      const entry = `\n## ${ts}\n\n${note}\n`;
+      let existing = "";
+      try { existing = readFileSync(memPath, "utf8"); } catch {}
+      writeFileSync(memPath, existing + entry);
+      return `Appended note to ${memPath}`;
+    },
+  },
+
+  git_diff: {
+    description: "Show unstaged git diff. Optional --staged for staged changes. From Aider.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        staged: { type: "boolean", description: "If true, show staged changes (--cached)." },
+        path: { type: "string", description: "Optional path to limit diff to." },
+      },
+    },
+    parallelSafe: true,
+    run: async ({ staged, path } = {}) => {
+      try {
+        let cmd = "git diff";
+        if (staged) cmd += " --cached";
+        if (path) cmd += ` -- "${path.replace(/["`$\\]/g, "")}"`;
+        const out = execSync(cmd, {
+          cwd: process.cwd(),
+          encoding: "utf8",
+          timeout: 10_000,
+          maxBuffer: 200_000,
+        });
+        if (!out.trim()) return "(no changes)";
+        if (out.length > 20_000) {
+          return out.slice(0, 20_000) + `\n... (truncated, ${out.length - 20_000} more chars)`;
+        }
+        return out;
+      } catch (e) {
+        return `(git diff failed: ${e.message})`;
+      }
+    },
+  },
+
+  tree: {
+    description: "Show directory tree (depth-limited). Default depth: 2. From Claude Code.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Directory to tree (default: CWD)." },
+        depth: { type: "number", description: "Max depth (default: 2, max: 4)." },
+      },
+    },
+    parallelSafe: true,
+    run: async ({ path = ".", depth = 2 } = {}) => {
+      const full = enforcePath(path);
+      const d = Math.min(Math.max(depth, 1), 4);
+      try {
+        // Try `tree` command first, fallback to find
+        try {
+          const out = execSync(`tree -L ${d} "${full}" 2>/dev/null`, {
+            encoding: "utf8",
+            timeout: 10_000,
+            maxBuffer: 200_000,
+          });
+          return out || "(empty)";
+        } catch {
+          // Fallback: build a simple tree with find
+          const out = execSync(`find "${full}" -maxdepth ${d} -not -path '*/node_modules/*' -not -path '*/.git/*' 2>/dev/null | head -100`, {
+            encoding: "utf8",
+            timeout: 10_000,
+            maxBuffer: 200_000,
+          });
+          return out || "(empty)";
+        }
+      } catch (e) {
+        return `(tree failed: ${e.message})`;
       }
     },
   },

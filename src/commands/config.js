@@ -13,6 +13,7 @@ const KNOWN_KEYS = [
   ["agentYolo",       "true/false — skip agent confirmations (DANGEROUS)."],
   ["agentMaxSteps",   "Max tool-call steps per agent run (default 20)."],
   ["autoUpdate",      "off | prompt | silent (default: prompt)."],
+  ["experimentalRemoteAI", "true/false — enable experimental remote-AI connector (SSH/Claude). ⚠️"],
   ["onboardingComplete", "true/false — whether onboarding has been completed."],
 ];
 

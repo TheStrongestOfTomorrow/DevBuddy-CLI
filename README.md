@@ -1,22 +1,32 @@
 # devbuddy
 
-> A minimal AI-powered CLI that helps developers — **just run `devbuddy`** to launch a unified chat + agent REPL. Type `/agent` to switch to agent mode, `/chat` to switch back. Multi-provider, sub-agents, DEVBUDDY.md context, dual-channel auto-update. Inspired by Gemini CLI, Qwen CLI, OpenClaude, Hermes, Aider, and Cline — still smaller than all of them.
+> A minimal AI-powered CLI that helps developers — **just run `devbuddy`** to launch a unified chat + agent REPL. Multi-provider, **MCP server support**, sub-agents, DEVBUDDY.md context, **experimental remote-AI (SSH/Claude Desktop)**, dual-channel auto-update. Inspired by Gemini CLI, Qwen CLI, OpenClaude, Hermes, Aider, Cline — still smaller than all of them.
 
-[![Version](https://img.shields.io/badge/version-0.5.1-cyan)](#)
+[![Version](https://img.shields.io/badge/version-0.5.5-cyan)](#)
 [![License](https://img.shields.io/badge/license-MIT-blue)](#)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-green)](#)
 
 ---
 
-## What's new in v0.5.1
+## What's new in v0.5.5
 
-- 🎯 **Unified REPL** — `devbuddy` (no subcommand) launches a single interactive session that does both chat AND agent. No more choosing upfront.
-- 🔀 **`/agent` and `/chat` slash commands** — switch modes mid-session. `/agent --yolo` switches to agent mode with confirms skipped.
-- 🏷️ **Mode indicator in prompt** — `[agent] >` vs `>` so you always know which mode you're in.
-- 🚀 **`devbuddy --agent`** — launch directly in agent mode (skip the `/agent` toggle).
-- ♻️ **`devbuddy chat` is now an alias** for `devbuddy` — backwards compatible.
+- 🔌 **MCP server support** (`devbuddy mcp`) — connect to any Model Context Protocol server. Both stdio (local commands) and HTTP/SSE (remote) transports. MCP tools are auto-discovered and exposed to the agent as `mcp_<server>_<tool>`.
+- 🧪 **Experimental remote-AI connector** (`devbuddy remote`) — for users without local API keys. Connect to a remote AI via SSH (any remote machine running `devbuddy-agent`) or Claude Desktop (local MCP). Gated by `experimentalRemoteAI: true` config.
+- 🔧 **5 new agent tools** from other harnesses:
+  - `grep_search` — search file contents with regex (from Hermes)
+  - `web_fetch` — fetch a URL and return text (from Hermes)
+  - `memory_update` — append to `.devbuddy/memory.md` (from Cline)
+  - `git_diff` — show unstaged/staged git diff (from Aider)
+  - `tree` — show directory tree, depth-limited (from Claude Code)
+- 📜 **v0.5.5 update script** — `scripts/update-v0.5.5.sh` for the dual-channel auto-updater.
+
+## What was new in v0.5.1
+
+- 🎯 **Unified REPL** — `devbuddy` (no subcommand) launches chat + agent in one session. `/agent` and `/chat` to switch modes.
 
 ## What was new in v0.5.0
+
+- 🐟 **Inline auto-suggest**, 🤖 **Sub-agents**, 🔑 **Multi-key onboarding**, 🛠️ **Dual-channel auto-update**.
 
 - 🐟 **Inline auto-suggest** in the chat REPL — fish-shell style. Type `/` and commands suggest themselves; type a filename and it auto-completes from CWD; type the start of a previous message and history suggests the rest. Press **Tab** or **→** to accept.
 - 🤖 **Sub-agents** (`agent` tool) — the main agent can spawn focused sub-agents for subtasks, optionally with a different model. Sub-agents have their own tool loop (minus `agent` and `finish` to prevent recursion) and use a `return` tool to bubble results back.
@@ -222,6 +232,107 @@ Manually check for and install updates.
 devbuddy update           # check + install
 devbuddy update --check   # check only
 ```
+
+---
+
+## MCP (Model Context Protocol) servers
+
+Connect devbuddy to any MCP server — locally via stdio, or remotely via HTTP/SSE. MCP tools are auto-discovered and made available to the agent.
+
+### Configure
+
+```bash
+# Add a stdio server (runs a local command)
+devbuddy mcp add filesystem stdio \
+  --command npx \
+  --args -y @modelcontextprotocol/server-filesystem /path/to/allow
+
+# Add an HTTP server (remote)
+devbuddy mcp add remote-api http \
+  --url https://example.com/mcp \
+  --header "Authorization=Bearer secret"
+
+# List configured servers
+devbuddy mcp list
+
+# Test a server (connects + lists its tools)
+devbuddy mcp test filesystem
+
+# Remove a server
+devbuddy mcp remove filesystem
+```
+
+### Config files (layered)
+
+| Source | Path | Notes |
+|--------|------|-------|
+| Global | `~/.devbuddy/mcp.json` | All projects |
+| Project | `./.devbuddy/mcp.json` | Overrides global (per-project) |
+| config.json | `~/.devbuddy/config.json` `mcp` section | Overrides files |
+
+Load order: global → project → config.json (later wins).
+
+### Using MCP tools in the agent
+
+When you run `devbuddy agent`, MCP tools are auto-discovered and registered with the prefix `mcp_<server>_<tool>`. The agent can call them like any other tool:
+
+```
+TOOL: mcp_filesystem_read_file
+{"path": "/path/to/file"}
+END_TOOL
+```
+
+The agent's system prompt automatically lists all available MCP tools.
+
+---
+
+## Experimental: Remote AI connector
+
+⚠️ **Experimental.** For users who don't have local API keys and want to use a remote AI instead. Gated by `experimentalRemoteAI: true` config.
+
+### Enable
+
+```bash
+devbuddy config set experimentalRemoteAI true
+```
+
+### SSH connector
+
+Run prompts on a remote machine that has `devbuddy-agent` (or any command that reads stdin and writes stdout).
+
+```bash
+# One-shot
+devbuddy remote ssh user@gpu-box "explain this code: $(cat src/app.js)"
+
+# Interactive
+devbuddy remote ssh user@gpu-box
+
+# Test connectivity
+devbuddy remote ssh-test user@gpu-box
+
+# Options
+devbuddy remote ssh user@host "prompt" --port 2222 --identity ~/.ssh/id_ed25519 --command my-agent
+```
+
+### Claude Desktop connector
+
+Talk to a local Claude Desktop instance via its MCP server. Requires Claude Desktop running with MCP enabled.
+
+```bash
+devbuddy remote claude "what is 2 + 2?"
+devbuddy remote claude-test
+```
+
+### Status
+
+```bash
+devbuddy remote status
+```
+
+⚠️ **Warnings:**
+- SSH: prompts are sent to the remote machine in plaintext over SSH. Make sure you trust the remote.
+- Claude Desktop: requires Claude Desktop installed and configured to expose a chat tool via MCP.
+- This feature is experimental and may change or be removed in future versions.
 
 ---
 

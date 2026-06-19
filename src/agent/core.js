@@ -19,6 +19,7 @@
 
 import { complete } from "../ai/providers.js";
 import { TOOLS, TOOL_NAMES, getToolNames, toolsForPrompt, executeTool, executeToolsParallel, resetSession, rollbackStep, clearBackups, getAllowedRoots, registerSubAgentTool } from "./tools.js";
+import { registerMcpTools, cleanupMcp } from "./mcp-bridge.js";
 import { systemPromptSuffix, findDevbuddyMd } from "../prompt.js";
 import * as ui from "../ui.js";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
@@ -155,6 +156,17 @@ export async function runAgent(task, opts = {}) {
   // Reset the session-scoped allowlist + rollback buffer
   resetSession(allowExtra);
   const allowedRoots = getAllowedRoots();
+
+  // Discover and register MCP tools (best-effort, non-blocking on failure)
+  let mcpToolNames = [];
+  try {
+    mcpToolNames = await registerMcpTools();
+    if (mcpToolNames.length > 0) {
+      ui.muted(`mcp: ${mcpToolNames.length} tool(s) from configured servers`);
+    }
+  } catch (e) {
+    ui.warn(`mcp discovery failed: ${e.message}`);
+  }
 
   // Load project memory (if any)
   const projectMemory = loadProjectMemory();
@@ -332,6 +344,9 @@ export async function runAgent(task, opts = {}) {
     // We don't auto-write; just inform the user.
     ui.muted(`tip: update ./.devbuddy/memory.md to save notes for next time`);
   }
+
+  // Disconnect MCP servers
+  try { await cleanupMcp(); } catch {}
 
   ui.blank();
   ui.heading("summary");

@@ -1,14 +1,22 @@
 # devbuddy
 
-> A minimal AI-powered CLI that helps developers — multi-provider, multi-message chat with **inline auto-suggest**, agentic harness with **sub-agents** + planner mode + project memory, DEVBUDDY.md context, multi-key management, and **dual-channel auto-update** (.sh script + releases fallback). Inspired by Gemini CLI, Qwen CLI, OpenClaude, Hermes, Aider, and Cline — still smaller than all of them.
+> A minimal AI-powered CLI that helps developers — **just run `devbuddy`** to launch a unified chat + agent REPL. Type `/agent` to switch to agent mode, `/chat` to switch back. Multi-provider, sub-agents, DEVBUDDY.md context, dual-channel auto-update. Inspired by Gemini CLI, Qwen CLI, OpenClaude, Hermes, Aider, and Cline — still smaller than all of them.
 
-[![Version](https://img.shields.io/badge/version-0.5.0-cyan)](#)
+[![Version](https://img.shields.io/badge/version-0.5.1-cyan)](#)
 [![License](https://img.shields.io/badge/license-MIT-blue)](#)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-green)](#)
 
 ---
 
-## What's new in v0.5.0
+## What's new in v0.5.1
+
+- 🎯 **Unified REPL** — `devbuddy` (no subcommand) launches a single interactive session that does both chat AND agent. No more choosing upfront.
+- 🔀 **`/agent` and `/chat` slash commands** — switch modes mid-session. `/agent --yolo` switches to agent mode with confirms skipped.
+- 🏷️ **Mode indicator in prompt** — `[agent] >` vs `>` so you always know which mode you're in.
+- 🚀 **`devbuddy --agent`** — launch directly in agent mode (skip the `/agent` toggle).
+- ♻️ **`devbuddy chat` is now an alias** for `devbuddy` — backwards compatible.
+
+## What was new in v0.5.0
 
 - 🐟 **Inline auto-suggest** in the chat REPL — fish-shell style. Type `/` and commands suggest themselves; type a filename and it auto-completes from CWD; type the start of a previous message and history suggests the rest. Press **Tab** or **→** to accept.
 - 🤖 **Sub-agents** (`agent` tool) — the main agent can spawn focused sub-agents for subtasks, optionally with a different model. Sub-agents have their own tool loop (minus `agent` and `finish` to prevent recursion) and use a `return` tool to bubble results back.
@@ -47,21 +55,20 @@ npm install -g TheStrongestOfTomorrow/DevBuddy-CLI
 # 2. Onboard (one time, ~1 min)
 devbuddy onboard
 
-# 3. Try the new chat
-devbuddy chat
-# > hello!
+# 3. Just run devbuddy — launches unified chat + agent REPL
+devbuddy
+# > hello!                    # chat mode by default
 # ai · Hi there! How can I help?
+# > /agent                    # switch to agent mode
+# [agent] > add a hello world route to app.js
+# [agent] > /chat             # switch back to chat
 # > /exit
 
-# 4. Add project context
-devbuddy init         # creates DEVBUDDY.md template
-# edit it to describe your project
+# 4. Or launch directly in agent mode
+devbuddy --agent
 
-# 5. Use the agent (off by default)
-devbuddy agent toggle
-devbuddy agent run "add a hello world route to app.js"
-devbuddy agent run --plan "refactor the auth module into its own folder"
-devbuddy agent run --allow ../shared-lib "use the shared logger in src/"
+# 5. Add project context
+devbuddy init         # creates DEVBUDDY.md template
 ```
 
 ---

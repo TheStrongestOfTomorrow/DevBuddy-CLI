@@ -123,9 +123,26 @@ export function suggestFor(input, history = []) {
 export function readlineWithSuggest(promptText, history = []) {
   return new Promise((resolve) => {
     const isTTY = process.stdin.isTTY && process.stdout.isTTY && !process.env.NO_COLOR;
-    if (isTTY) {
-      try { process.stdin.setRawMode(true); } catch {}
+
+    // Non-TTY (piped) fallback: simple line-based read.
+    if (!isTTY) {
+      process.stdout.write(promptText);
+      let buf = "";
+      const onData = (chunk) => {
+        buf += chunk.toString();
+        if (buf.includes("\n")) {
+          process.stdin.removeListener("data", onData);
+          process.stdin.pause();
+          resolve(buf.replace(/\r?\n$/, ""));
+        }
+      };
+      process.stdin.resume();
+      process.stdin.once("data", onData);
+      return;
     }
+
+    // TTY path: raw mode with inline suggestions.
+    try { process.stdin.setRawMode(true); } catch {}
     process.stdout.write(promptText);
 
     let buf = "";

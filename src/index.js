@@ -27,12 +27,14 @@ import { register as registerConfig }     from "./commands/config.js";
 import { register as registerAgent }      from "./commands/agent.js";
 import { register as registerUpdate }     from "./commands/update.js";
 import { register as registerInit }       from "./commands/init.js";
+import { launchUnified }                  from "./commands/repl.js";
 
 // Commands that should NOT trigger the auto-update check (they're either
-// meta-commands themselves, or short offline operations).
+// meta-commands themselves, short offline operations, or interactive REPLs
+// where an update prompt would interrupt the session).
 const SKIP_UPDATE_FOR = new Set([
   "onboard", "update", "auth", "config", "todo", "chat", "init", "help",
-  undefined, // no command given
+  undefined, // no command → launches unified REPL
 ]);
 
 export function run() {
@@ -42,24 +44,36 @@ export function run() {
     .name("devbuddy")
     .description(
       "A minimal AI-powered CLI that helps developers.\n\n" +
-      "  onboard    One-time setup wizard (REQUIRED before AI commands).\n" +
-      "  init       Create a DEVBUDDY.md template (project context for AI).\n" +
-      "  ask        Ask a question, get an AI answer.\n" +
-      "  summarize  Condense a file or stdin into key points.\n" +
-      "  explain    Explain code in plain language.\n" +
-      "  translate  Translate text to another language.\n" +
-      "  chat       Multi-message chat with AI. Saved to disk.\n" +
-      "  agent      Agentic harness — read/write/edit files, run shell.\n" +
-      "  todo       Manage quick todos with priorities.\n" +
-      "  auth       Manage API keys across providers.\n" +
-      "  config     View and edit persistent settings.\n" +
-      "  update     Check for and install updates.\n\n" +
+      "  devbuddy                Launch unified chat + agent REPL (just type /agent to switch modes).\n" +
+      "  devbuddy --agent        Launch directly in agent mode.\n" +
+      "  onboard                 One-time setup wizard (REQUIRED before AI commands).\n" +
+      "  init                    Create a DEVBUDDY.md template (project context for AI).\n" +
+      "  ask                     Ask a question, get an AI answer (one-shot).\n" +
+      "  summarize               Condense a file or stdin into key points.\n" +
+      "  explain                 Explain code in plain language.\n" +
+      "  translate               Translate text to another language.\n" +
+      "  chat                    Multi-message chat (alias for `devbuddy`).\n" +
+      "  agent                   Agentic harness — read/write/edit files, run shell.\n" +
+      "  todo                    Manage quick todos with priorities.\n" +
+      "  auth                    Manage API keys across providers.\n" +
+      "  config                  View and edit persistent settings.\n" +
+      "  update                  Check for and install updates.\n\n" +
       "Providers: HuggingFace (free) · OpenAI · Anthropic · Groq (free) · OpenRouter · Ollama (local) · Together · Mistral · Cohere\n" +
       "Project context: ./DEVBUDDY.md → ~/.devbuddy/DEVBUDDY.md\n" +
       "Storage: ~/.devbuddy/  (config.json, chats/, todos.json)"
     )
     .version(getVersion(), "-v, --version")
-    .helpOption("-h, --help", "Show this help.");
+    .helpOption("-h, --help", "Show this help.")
+    .option("--agent", "Launch directly in agent mode (unified REPL).")
+    .option("--yolo", "Skip agent confirmations (DANGEROUS). Only applies with --agent.")
+    .option("--project", "Scope the chat to the current directory.")
+    .option("-c, --continue", "Resume the most recent chat.")
+    .option("--chat <id>", "Resume a specific chat by ID.")
+    .option("--allow <dir>", "Grant access to an additional directory (agent mode). Repeatable.", (v, acc) => { (acc || []).push(v); return acc; }, [])
+    .action(async (opts) => {
+      // Default action when no subcommand given: launch unified REPL.
+      await launchUnified(opts);
+    });
 
   program.option("--no-color", "Disable colored output.");
   program.hook("preAction", (cmd) => {
@@ -83,11 +97,8 @@ export function run() {
   registerUpdate(program);
   registerInit(program);
 
-  // Default action: show help if no command given
-  if (process.argv.length <= 2) {
-    program.outputHelp();
-    process.exit(0);
-  }
+  // Note: no need for "show help if no command given" — the default action
+  // on the program itself launches the unified REPL when no subcommand matches.
 
   // Fire-and-forget auto-update check (non-blocking, but we await before exit
   // if it returns a prompt). We do this in preAction so we know the command.

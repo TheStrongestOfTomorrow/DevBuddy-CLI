@@ -312,41 +312,22 @@ async function runRepl({ chat, opts }) {
 // --- Command registration ---
 
 export function register(program) {
-  const chat = program.command("chat").description("Multi-message chat with AI. Saved to disk.");
+  const chat = program.command("chat").description("Multi-message chat with AI. Saved to disk. (Alias: just run `devbuddy`.)");
 
-  // Default: start a new chat (or resume with flags)
+  // Default: start a new chat (or resume with flags) via the unified REPL
   chat
     .option("--project", "Scope the chat to the current directory (saved to ./.devbuddy/chats/).")
     .option("-c, --continue", "Resume the most recent chat.")
     .option("--chat <id>", "Resume a specific chat by ID.")
     .option("-m, --model <name>", "Override the model for this chat.")
     .option("-s, --system <prompt>", "Set a system prompt for this chat.")
+    .option("--agent", "Start directly in agent mode.")
+    .option("--yolo", "Skip agent confirmations (DANGEROUS).")
+    .option("--allow <dir>", "Grant access to an additional directory (agent mode). Repeatable.", (v, acc) => { (acc || []).push(v); return acc; }, [])
     .action(async (opts) => {
-      requireOnboarding();
-
-      let target;
-      if (opts.continue) {
-        const list = listChats({ scope: opts.project ? "project" : "all" });
-        if (list.length === 0) {
-          ui.warn("no saved chats to continue. starting a new one.");
-          target = createChat({ scope: opts.project ? "project" : "global" });
-        } else {
-          const found = getChat(list[0].id);
-          target = found || createChat({ scope: opts.project ? "project" : "global" });
-        }
-      } else if (opts.chat) {
-        const found = getChat(opts.chat);
-        if (!found) {
-          ui.error(`chat not found: ${opts.chat}`);
-          ui.muted("list chats with: devbuddy chat list");
-          process.exit(1);
-        }
-        target = found;
-      } else {
-        target = createChat({ scope: opts.project ? "project" : "global" });
-      }
-
-      await runRepl({ chat: target, opts });
+      // Delegate to the unified REPL (same as `devbuddy` with no subcommand).
+      const { launchUnified } = await import("./repl.js");
+      await launchUnified(opts);
     });
 
   chat

@@ -5,6 +5,52 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] — 2026-06-19
+
+### Added
+
+- **Unified REPL** (`src/commands/repl.js`). Running `devbuddy` with no subcommand now launches a single interactive session that does both chat AND agent. No more choosing upfront — start chatting, switch to agent mid-conversation, switch back.
+
+- **`/agent` slash command** — switch to agent mode mid-session. Supports `--yolo` (skip confirms), `--safe` (force confirms on), `--allow <dir>` (grant extra directory access). Example: `/agent --yolo --allow ../shared-lib`.
+
+- **`/chat` slash command** — switch back to chat mode.
+
+- **`/mode` slash command** — show the current mode.
+
+- **Mode indicator in prompt** — agent mode shows `[agent] >`, chat mode shows `>`. Always know which mode you're in at a glance.
+
+- **`devbuddy --agent`** flag — launch directly in agent mode (skip the `/agent` toggle).
+
+- **`devbuddy --yolo`** flag — when combined with `--agent`, starts agent mode with confirms skipped.
+
+- Welcome banner now shows the current mode (chat or AGENT, with yolo indicator).
+
+- `/help` now marks the active mode's command with `→`.
+
+- Mode is included in `/history` and `/cost` output.
+
+### Changed
+
+- `devbuddy` with no subcommand used to print help and exit. Now it launches the unified REPL.
+- `devbuddy chat` is now an alias for `devbuddy` — both launch the unified REPL. All `chat` subcommands (`list`, `show`, `branch`, `export`, `rm`) still work.
+- `devbuddy agent run "<task>"` still works for one-shot agent runs (backwards compatible).
+- Auto-update check now skips for the unified REPL (no command = REPL = interactive, don't interrupt).
+- `readlineWithSuggest()` in `src/ui/suggest.js` now has a non-TTY fallback path (line-based read) so piped input works correctly.
+
+### Design
+
+The unified REPL is the new primary entry point. The old `devbuddy chat` and `devbuddy agent run` commands still work as aliases / one-shot variants, but the recommended flow is now:
+
+```bash
+devbuddy           # chat by default
+/agent             # switch to agent mode
+/chat              # switch back
+```
+
+This matches the UX of Gemini CLI and Qwen CLI where a single command launches the full interactive experience.
+
+---
+
 ## [0.5.0] — 2026-06-19
 
 ### Added

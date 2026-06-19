@@ -1,6 +1,6 @@
 {
   "name": "devbuddy",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "A minimal AI-powered CLI that helps developers — multi-provider, multi-message chat with auto-suggest, agentic harness with sub-agents + planner mode, DEVBUDDY.md context, dual-channel auto-update.",
   "type": "module",
   "main": "src/index.js",

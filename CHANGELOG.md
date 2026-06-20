@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] — 2026-06-20
+
+### Hotfix
+
+- **Updater timeout fix.** The GitHub API check was timing out (4s timeout) on slow networks like Termux on a phone. Now:
+  - Increased timeout from 4s to 15s for all GitHub API calls
+  - Added retry (2 attempts with backoff) for API + script fetches
+  - Better error messages — when the check fails, suggests `devbuddy update --force-install`
+
+- **`devbuddy update --force-install`** — new flag that skips the GitHub API check entirely and just runs `npm install -g` directly. Use when GitHub API times out or is rate-limited.
+
+- **`scripts/update-v1.1.1.sh`** — tagged update script.
+
+### Note
+
+If you're stuck on an older version where `--force-install` doesn't exist yet, install v1.1.1 directly:
+
+```bash
+npm install -g TheStrongestOfTomorrow/DevBuddy-CLI
+```
+
+Once on v1.1.1, `devbuddy update --force-install` will work for future updates.
+
+---
+
 ## [1.1.0] — 2026-06-20
 
 ### Added

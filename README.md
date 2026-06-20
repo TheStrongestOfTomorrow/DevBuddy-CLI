@@ -1,14 +1,20 @@
 # devbuddy
 
-> **v1.1.0** — AI-powered dev CLI with unified chat + agent REPL, **streaming responses**, **DevBuddy as an MCP server**, **phone control (ADB/Shizuku)**, **Ollama support (no API key needed)**, 9 providers, sub-agents, **commit/review/doctor** commands, and dual-channel auto-update. Inspired by Gemini CLI, Qwen CLI, OpenClaude, Hermes, Aider, Cline, ClosePaw — still smaller than all of them.
+> **v1.1.1** — AI-powered dev CLI with unified chat + agent REPL, **streaming responses**, **DevBuddy as an MCP server**, **phone control (ADB/Shizuku)**, **Ollama support (no API key needed)**, 9 providers, sub-agents, **commit/review/doctor** commands, and dual-channel auto-update. Inspired by Gemini CLI, Qwen CLI, OpenClaude, Hermes, Aider, Cline, ClosePaw — still smaller than all of them.
 
-[![Version](https://img.shields.io/badge/version-1.1.0-cyan)](#)
+[![Version](https://img.shields.io/badge/version-1.1.1-cyan)](#)
 [![License](https://img.shields.io/badge/license-MIT-blue)](#)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-green)](#)
 
 ---
 
-## What's new in v1.1.0
+## What's new in v1.1.1 (hotfix)
+
+- 🛠️ **Updater timeout fix** — GitHub API timeout increased from 4s → 15s, with 2 retries. Fixes `devbuddy update` failing on slow networks (e.g. Termux on phone).
+- 🚀 **`devbuddy update --force-install`** — skips the GitHub API check entirely and just runs `npm install -g` directly. Use when the API times out or is rate-limited.
+- 💡 Better error messages when the API check fails — now suggests `--force-install`.
+
+## What was new in v1.1.0
 
 - 📱 **Phone control (experimental)** (`devbuddy phone`) — AI agent can control your Android phone via ADB or Shizuku (rish). 11 tools: tap, swipe, type, screenshot, launch apps, run shell, etc. **Ollama-only** for safety (no cloud APIs see your phone screen). Strict trust gate: type `I trust this AI` to enable. Inspired by [ClosePaw](https://github.com/imoonkey/closepaw).
 

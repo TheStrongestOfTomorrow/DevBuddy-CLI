@@ -48,11 +48,27 @@ function cmpVersions(a, b) {
   return 0;
 }
 
+async function fetchWithRetry(url, opts = {}, retries = 2) {
+  let lastErr;
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const res = await fetch(url, opts);
+      return res;
+    } catch (e) {
+      lastErr = e;
+      if (i < retries) {
+        await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
+      }
+    }
+  }
+  throw lastErr;
+}
+
 async function fetchLatestVersion() {
-  const res = await fetch(RELEASES_URL, {
+  const res = await fetchWithRetry(RELEASES_URL, {
     headers: { "User-Agent": "DevBuddy-CLI", "Accept": "application/vnd.github+json" },
-    signal: AbortSignal.timeout(4000),
-  });
+    signal: AbortSignal.timeout(15000),
+  }, 2);
   if (!res.ok) throw new Error(`GitHub API returned ${res.status}`);
   const data = await res.json();
   return {
@@ -65,15 +81,18 @@ async function fetchLatestVersion() {
 // Try to fetch the tagged .sh script for a given version.
 async function fetchUpdateScript(version) {
   const url = `${RAW_BASE}/scripts/update-v${version}.sh`;
-  const res = await fetch(url, {
-    headers: { "User-Agent": "DevBuddy-CLI" },
-    signal: AbortSignal.timeout(5000),
-  });
-  if (!res.ok) return null;
-  const text = await res.text();
-  // Validate it's a real shell script (starts with shebang or has # devbuddy-update tag)
-  if (!text.includes("#!") && !text.includes("# devbuddy-update")) return null;
-  return text;
+  try {
+    const res = await fetchWithRetry(url, {
+      headers: { "User-Agent": "DevBuddy-CLI" },
+      signal: AbortSignal.timeout(15000),
+    }, 1);
+    if (!res.ok) return null;
+    const text = await res.text();
+    if (!text.includes("#!") && !text.includes("# devbuddy-update")) return null;
+    return text;
+  } catch {
+    return null;
+  }
 }
 
 // Fetch the packages.json manifest for a version (if it exists).
@@ -85,10 +104,10 @@ async function fetchPackagesManifest(version) {
   ];
   for (const url of urls) {
     try {
-      const res = await fetch(url, {
+      const res = await fetchWithRetry(url, {
         headers: { "User-Agent": "DevBuddy-CLI" },
-        signal: AbortSignal.timeout(4000),
-      });
+        signal: AbortSignal.timeout(10000),
+      }, 1);
       if (!res.ok) continue;
       const data = await res.json();
       if (data && Array.isArray(data.packages)) return data;
@@ -147,6 +166,20 @@ function installManifestPackages(manifest) {
 }
 
 /**
+ * Force-install the latest version without checking GitHub API first.
+ * Useful when the API is timing out or rate-limited.
+ */
+export function forceInstall() {
+  ui.muted(`  running: ${INSTALL_CMD_FALLBACK}`);
+  const ok = runShell(INSTALL_CMD_FALLBACK);
+  if (ok) {
+    ui.ok(`install complete. Re-run your command.`);
+    return { installed: true };
+  }
+  return { installed: false };
+}
+
+/**
  * Check for updates and optionally install.
  * @param {object} opts
  * @param {boolean} [opts.force]   bypass the 1-hour cache
@@ -172,8 +205,13 @@ export async function checkForUpdates(opts = {}) {
   try {
     latest = await fetchLatestVersion();
   } catch (e) {
-    if (opts.force) ui.warn(`could not check for updates: ${e.message}`);
-    return { checked: false, current, error: e.message };
+    const msg = e.message || String(e);
+    if (opts.force) {
+      ui.warn(`could not check GitHub for updates: ${msg}`);
+      ui.muted(`  this is often a network timeout or rate limit.`);
+      ui.muted(`  try: devbuddy update --force-install  (skips the check, just installs)`);
+    }
+    return { checked: false, current, error: msg };
   }
 
   if (!latest.version) {

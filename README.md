@@ -1,18 +1,21 @@
 # devbuddy
 
-> **v1.1.1** — AI-powered dev CLI with unified chat + agent REPL, **streaming responses**, **DevBuddy as an MCP server**, **phone control (ADB/Shizuku)**, **Ollama support (no API key needed)**, 9 providers, sub-agents, **commit/review/doctor** commands, and dual-channel auto-update. Inspired by Gemini CLI, Qwen CLI, OpenClaude, Hermes, Aider, Cline, ClosePaw — still smaller than all of them.
+> **v1.1.2** — AI-powered dev CLI with unified chat + agent REPL, **streaming responses**, **DevBuddy as an MCP server**, **phone control (ADB/Shizuku)**, **Ollama support (no API key needed)**, 9 providers, sub-agents, **commit/review/doctor** commands, and dual-channel auto-update. Inspired by Gemini CLI, Qwen CLI, OpenClaude, Hermes, Aider, Cline, ClosePaw — still smaller than all of them.
 
-[![Version](https://img.shields.io/badge/version-1.1.1-cyan)](#)
+[![Version](https://img.shields.io/badge/version-1.1.2-cyan)](#)
 [![License](https://img.shields.io/badge/license-MIT-blue)](#)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-green)](#)
 
 ---
 
-## What's new in v1.1.1 (hotfix)
+## What's new in v1.1.2 (hotfix)
+
+- 📱 **Custom rish path** — `devbuddy phone rish-path <path>` lets you set a custom path to the `rish` binary (Shizuku), for when it's not on PATH. Also available as `--rish-path` flag on `phone enable`. Useful because rish can be in different locations on different devices.
+
+## What was new in v1.1.1 (hotfix)
 
 - 🛠️ **Updater timeout fix** — GitHub API timeout increased from 4s → 15s, with 2 retries. Fixes `devbuddy update` failing on slow networks (e.g. Termux on phone).
 - 🚀 **`devbuddy update --force-install`** — skips the GitHub API check entirely and just runs `npm install -g` directly. Use when the API times out or is rate-limited.
-- 💡 Better error messages when the API check fails — now suggests `--force-install`.
 
 ## What was new in v1.1.0
 
@@ -252,6 +255,9 @@ AI phone control via ADB/Shizuku. **Ollama-only.**
 ```bash
 devbuddy phone enable                  # strict trust gate (type "I trust this AI")
 devbuddy phone enable --mode rish      # Shizuku mode (on-phone)
+devbuddy phone enable --mode rish --rish-path /data/data/moe.shizuku.privileged.api/start.sh
+devbuddy phone rish-path /path/to/rish # set custom rish binary location (v1.1.2)
+devbuddy phone rish-path ""            # clear (use rish from PATH)
 devbuddy phone status                  # show config + connectivity
 devbuddy phone test                    # test connectivity
 devbuddy phone devices                 # list connected devices

@@ -22,13 +22,17 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import * as ui from "../ui.js";
 
-function shellPrefix(mode) {
-  if (mode === "rish") return "rish";
+function shellPrefix(mode, rishPath = "") {
+  if (mode === "rish") {
+    // Use custom rish path if set, otherwise just 'rish' (from PATH)
+    const rishBin = rishPath || "rish";
+    return rishBin;
+  }
   return "adb shell";
 }
 
-function phoneExec(cmd, { mode = "adb", timeout = 10_000 } = {}) {
-  const prefix = shellPrefix(mode);
+function phoneExec(cmd, { mode = "adb", timeout = 10_000, rishPath = "" } = {}) {
+  const prefix = shellPrefix(mode, rishPath);
   const fullCmd = `${prefix} ${cmd}`;
   try {
     return execSync(fullCmd, {
@@ -42,10 +46,11 @@ function phoneExec(cmd, { mode = "adb", timeout = 10_000 } = {}) {
   }
 }
 
-export function checkPhoneAvailable(mode = "adb") {
+export function checkPhoneAvailable(mode = "adb", rishPath = "") {
   try {
     if (mode === "rish") {
-      const out = execSync("rish echo DEVBUDDY_PHONE_OK", {
+      const rishBin = rishPath || "rish";
+      const out = execSync(`"${rishBin}" echo DEVBUDDY_PHONE_OK`, {
         encoding: "utf8",
         timeout: 5_000,
         stdio: ["pipe", "pipe", "pipe"],
@@ -73,6 +78,7 @@ export const PHONE_TOOLS = {
     confirm: false,
     run: async (args, opts = {}) => {
       const mode = opts.phoneMode || "adb";
+      const rishPath = opts.rishPath || "";
       if (mode === "rish") {
         const r = checkPhoneAvailable("rish");
         return r.ok ? "Shizuku (rish) is running and accessible." : `Shizuku not available: ${r.error}`;
@@ -94,12 +100,14 @@ export const PHONE_TOOLS = {
     confirm: false,
     run: async (args, opts = {}) => {
       const mode = opts.phoneMode || "adb";
+      const rishPath = opts.rishPath || "";
       const ts = new Date().toISOString().replace(/[:.]/g, "-");
       const dir = join(process.cwd(), ".devbuddy", "phone-screenshots");
       mkdirSync(dir, { recursive: true });
       const outPath = args.output || join(dir, `screenshot-${ts}.png`);
       if (mode === "rish") {
-        execSync(`rish screencap -p > "${outPath}"`, { encoding: "utf8", timeout: 15_000, stdio: ["pipe", "pipe", "pipe"], shell: "/bin/sh" });
+        const rishBin = rishPath || "rish";
+        execSync(`"${rishBin}" screencap -p > "${outPath}"`, { encoding: "utf8", timeout: 15_000, stdio: ["pipe", "pipe", "pipe"], shell: "/bin/sh" });
       } else {
         execSync(`adb exec-out screencap -p > "${outPath}"`, { encoding: "utf8", timeout: 15_000, stdio: ["pipe", "pipe", "pipe"], shell: "/bin/sh" });
       }
@@ -121,10 +129,11 @@ export const PHONE_TOOLS = {
     confirm: true,
     run: async (args, opts = {}) => {
       const mode = opts.phoneMode || "adb";
+      const rishPath = opts.rishPath || "";
       if (typeof args.x !== "number" || typeof args.y !== "number") {
         throw new Error("x and y must be numbers");
       }
-      phoneExec(`input tap ${Math.floor(args.x)} ${Math.floor(args.y)}`, { mode });
+      phoneExec(`input tap ${Math.floor(args.x)} ${Math.floor(args.y)}`, { mode, rishPath });
       return `Tapped at (${args.x}, ${args.y})`;
     },
   },
@@ -144,8 +153,9 @@ export const PHONE_TOOLS = {
     confirm: true,
     run: async (args, opts = {}) => {
       const mode = opts.phoneMode || "adb";
+      const rishPath = opts.rishPath || "";
       const dur = Math.floor(args.duration_ms || 1500);
-      phoneExec(`input swipe ${Math.floor(args.x)} ${Math.floor(args.y)} ${Math.floor(args.x)} ${Math.floor(args.y)} ${dur}`, { mode });
+      phoneExec(`input swipe ${Math.floor(args.x)} ${Math.floor(args.y)} ${Math.floor(args.x)} ${Math.floor(args.y)} ${dur}`, { mode, rishPath });
       return `Long-pressed at (${args.x}, ${args.y}) for ${dur}ms`;
     },
   },
@@ -165,8 +175,9 @@ export const PHONE_TOOLS = {
     confirm: true,
     run: async (args, opts = {}) => {
       const mode = opts.phoneMode || "adb";
+      const rishPath = opts.rishPath || "";
       const dur = Math.floor(args.duration_ms || 300);
-      phoneExec(`input swipe ${Math.floor(args.x1)} ${Math.floor(args.y1)} ${Math.floor(args.x2)} ${Math.floor(args.y2)} ${dur}`, { mode });
+      phoneExec(`input swipe ${Math.floor(args.x1)} ${Math.floor(args.y1)} ${Math.floor(args.x2)} ${Math.floor(args.y2)} ${dur}`, { mode, rishPath });
       return `Swiped from (${args.x1}, ${args.y1}) to (${args.x2}, ${args.y2}) over ${dur}ms`;
     },
   },
@@ -184,8 +195,9 @@ export const PHONE_TOOLS = {
     confirm: true,
     run: async (args, opts = {}) => {
       const mode = opts.phoneMode || "adb";
+      const rishPath = opts.rishPath || "";
       const encoded = String(args.text).replace(/ /g, "%s").replace(/["`$\\]/g, "");
-      phoneExec(`input text "${encoded}"`, { mode });
+      phoneExec(`input text "${encoded}"`, { mode, rishPath });
       return `Typed: ${args.text}`;
     },
   },
@@ -206,13 +218,14 @@ export const PHONE_TOOLS = {
     confirm: true,
     run: async (args, opts = {}) => {
       const mode = opts.phoneMode || "adb";
+      const rishPath = opts.rishPath || "";
       const keyMap = {
         home: 3, back: 4, menu: 82, power: 26,
         volume_up: 24, volume_down: 25, app_switch: 187,
         enter: 66, del: 67, tab: 61, escape: 111,
       };
       const code = keyMap[String(args.keycode).toLowerCase()] || args.keycode;
-      phoneExec(`input keyevent ${code}`, { mode });
+      phoneExec(`input keyevent ${code}`, { mode, rishPath });
       return `Sent key event: ${args.keycode} (${code})`;
     },
   },
@@ -230,8 +243,9 @@ export const PHONE_TOOLS = {
     confirm: true,
     run: async (args, opts = {}) => {
       const mode = opts.phoneMode || "adb";
+      const rishPath = opts.rishPath || "";
       const pkg = String(args.package).replace(/[^a-zA-Z0-9._]/g, "");
-      phoneExec(`monkey -p ${pkg} -c android.intent.category.LAUNCHER 1`, { mode });
+      phoneExec(`monkey -p ${pkg} -c android.intent.category.LAUNCHER 1`, { mode, rishPath });
       return `Launched app: ${pkg}`;
     },
   },
@@ -248,7 +262,8 @@ export const PHONE_TOOLS = {
     confirm: false,
     run: async (args, opts = {}) => {
       const mode = opts.phoneMode || "adb";
-      let out = phoneExec("pm list packages", { mode, timeout: 15_000 });
+      const rishPath = opts.rishPath || "";
+      let out = phoneExec("pm list packages", { mode, rishPath, timeout: 15_000 });
       let lines = out.split("\n").map((l) => l.replace(/^package:/, "").trim()).filter(Boolean);
       if (args.filter) {
         const f = String(args.filter).toLowerCase();
@@ -266,7 +281,8 @@ export const PHONE_TOOLS = {
     confirm: false,
     run: async (args, opts = {}) => {
       const mode = opts.phoneMode || "adb";
-      const out = phoneExec("dumpsys activity activities | grep mResumedActivity", { mode, timeout: 10_000 });
+      const rishPath = opts.rishPath || "";
+      const out = phoneExec("dumpsys activity activities | grep mResumedActivity", { mode, rishPath, timeout: 10_000 });
       const m = out.match(/(\w[\w.]*)\/\./);
       if (m) return `Current app: ${m[1]}`;
       return out || "(could not determine current app)";
@@ -287,11 +303,12 @@ export const PHONE_TOOLS = {
     dangerous: true,
     run: async (args, opts = {}) => {
       const mode = opts.phoneMode || "adb";
+      const rishPath = opts.rishPath || "";
       const cmd = String(args.command);
       if (/\brm\s+-rf\s+\//.test(cmd) || /\bdd\s+if=/.test(cmd) || /\bmkfs/.test(cmd)) {
         throw new Error("Refusing to run potentially destructive command on phone.");
       }
-      const out = phoneExec(cmd, { mode, timeout: 30_000 });
+      const out = phoneExec(cmd, { mode, rishPath, timeout: 30_000 });
       return out || "(no output)";
     },
   },
@@ -299,14 +316,14 @@ export const PHONE_TOOLS = {
 
 export const PHONE_TOOL_NAMES = Object.keys(PHONE_TOOLS);
 
-export async function registerPhoneTools(mode = "adb") {
+export async function registerPhoneTools(mode = "adb", rishPath = "") {
   const { TOOLS } = await import("./tools.js");
   let count = 0;
   for (const [name, spec] of Object.entries(PHONE_TOOLS)) {
     const originalRun = spec.run;
     TOOLS[name] = {
       ...spec,
-      run: async (args, opts = {}) => originalRun(args, { ...opts, phoneMode: mode }),
+      run: async (args, opts = {}) => originalRun(args, { ...opts, phoneMode: mode, rishPath }),
     };
     count++;
   }

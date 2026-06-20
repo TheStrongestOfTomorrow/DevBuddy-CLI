@@ -181,8 +181,9 @@ export async function runAgent(task, opts = {}) {
       ui.warn(`phone control requires Ollama (active: ${providerId}). phone tools NOT registered.`);
     } else {
       const phoneMode = cfg.phoneControlMode || "adb";
-      phoneToolCount = await registerPhoneTools(phoneMode);
-      ui.warn(`⚠️ phone control ACTIVE (${phoneMode} mode, ${phoneToolCount} tools). Agent can control your phone.`);
+      const rishPath = cfg.phoneControlRishPath || "";
+      phoneToolCount = await registerPhoneTools(phoneMode, rishPath);
+      ui.warn(`⚠️ phone control ACTIVE (${phoneMode} mode${rishPath ? `, rish: ${rishPath}` : ""}, ${phoneToolCount} tools). Agent can control your phone.`);
     }
   }
 

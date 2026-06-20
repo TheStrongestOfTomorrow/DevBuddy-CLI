@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] — 2026-06-20
+
+### Hotfix
+
+- **Custom rish path for phone control.** Shizuku's `rish` binary can be in different locations on different devices. Now you can set a custom path:
+  - `devbuddy phone rish-path <path>` — set the custom rish binary location
+  - `devbuddy phone rish-path` (no arg) — show current path + example locations
+  - `devbuddy phone rish-path ""` — clear (use `rish` from PATH)
+  - `devbuddy phone enable --rish-path <path>` — set during enable
+  - The path is stored in `config.phoneControlRishPath` and used by all 11 phone tools when in rish mode.
+
+- **`scripts/update-v1.1.2.sh`** — tagged update script.
+
+---
+
 ## [1.1.1] — 2026-06-20
 
 ### Hotfix

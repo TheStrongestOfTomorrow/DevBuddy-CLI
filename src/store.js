@@ -47,6 +47,7 @@ const DEFAULT_CONFIG = {
   phoneControlTrusted: false,    // user typed "I trust this AI"
   phoneControlMode: "adb",       // 'adb' (PC→phone) | 'rish' (on-phone Shizuku)
   phoneControlEnabledAt: null,   // timestamp
+  phoneControlRishPath: "",      // custom path to rish binary (default: empty = use 'rish' from PATH)
 
   createdAt: null,
 };

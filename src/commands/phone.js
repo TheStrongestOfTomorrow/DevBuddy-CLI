@@ -42,6 +42,7 @@ export function register(program) {
     .command("enable")
     .description("Enable phone control. Requires Ollama + type-to-confirm trust.")
     .option("--mode <mode>", "adb | rish (default: adb)", "adb")
+    .option("--rish-path <path>", "Custom path to the rish binary (for rish mode, if not on PATH).", "")
     .action(async (opts) => {
       const cfg = loadConfig();
 
@@ -89,7 +90,7 @@ export function register(program) {
 
       // --- Gate 2: check ADB/rish available ---
       ui.heading("checking phone connectivity");
-      const available = checkPhoneAvailable(opts.mode);
+      const available = checkPhoneAvailable(opts.mode, opts.rishPath || "");
       if (!available.ok) {
         ui.error(
           `Phone not accessible in '${opts.mode}' mode: ${available.error || "no device"}\n` +
@@ -118,6 +119,7 @@ export function register(program) {
       cfg.phoneControlEnabled = true;
       cfg.phoneControlTrusted = true;
       cfg.phoneControlMode = opts.mode;
+      cfg.phoneControlRishPath = opts.rishPath || "";
       cfg.phoneControlEnabledAt = new Date().toISOString();
       saveConfig(cfg);
 
@@ -156,12 +158,13 @@ export function register(program) {
       ui.kv("enabled", cfg.phoneControlEnabled ? ui.theme.warn("yes") : "no");
       ui.kv("trusted", cfg.phoneControlTrusted ? ui.theme.warn("yes") : "no");
       ui.kv("mode", cfg.phoneControlMode || "adb");
+      ui.kv("rish path", cfg.phoneControlRishPath || "(default: rish from PATH)");
       ui.kv("provider", `${PROVIDERS[providerId]?.name || providerId} ${providerId === "ollama" ? ui.theme.ok("(ollama ✓)") : ui.theme.err("(NOT ollama — phone control requires ollama)")}`);
       if (cfg.phoneControlEnabledAt) ui.kv("enabled at", cfg.phoneControlEnabledAt);
 
       ui.blank();
       ui.heading("connectivity check");
-      const available = checkPhoneAvailable(cfg.phoneControlMode || "adb");
+      const available = checkPhoneAvailable(cfg.phoneControlMode || "adb", cfg.phoneControlRishPath || "");
       if (available.ok) {
         ui.ok(`phone accessible (${available.mode})`);
       } else {
@@ -184,7 +187,7 @@ export function register(program) {
       const cfg = loadConfig();
       const mode = cfg.phoneControlMode || "adb";
       ui.muted(`testing ${mode} connectivity…`);
-      const available = checkPhoneAvailable(mode);
+      const available = checkPhoneAvailable(mode, cfg.phoneControlRishPath || "");
       if (available.ok) {
         ui.ok(`✓ phone accessible (${mode})`);
         if (mode === "adb") {
@@ -211,6 +214,32 @@ export function register(program) {
         console.log(out);
       } catch (e) {
         ui.error(e.message);
+      }
+    });
+
+  phone
+    .command("rish-path [path]")
+    .description("Set or show the custom path to the rish binary (for rish mode, when rish is not on PATH).")
+    .action((path) => {
+      const cfg = loadConfig();
+      if (!path) {
+        ui.muted("current rish path: " + (cfg.phoneControlRishPath || "(not set — uses 'rish' from PATH)"));
+        ui.blank();
+        ui.muted("set with: devbuddy phone rish-path /path/to/rish");
+        ui.muted("clear with: devbuddy phone rish-path \"\"");
+        ui.muted("");
+        ui.muted("example locations where rish might be:");
+        ui.muted("  /data/data/moe.shizuku.privileged.api/start.sh  (Shizuku rish)");
+        ui.muted("  /sdcard/rish                                    (if you copied it)");
+        ui.muted("  ~/rish                                          (home directory)");
+        return;
+      }
+      cfg.phoneControlRishPath = path.trim();
+      saveConfig(cfg);
+      if (cfg.phoneControlRishPath) {
+        ui.ok("rish path set to: " + cfg.phoneControlRishPath);
+      } else {
+        ui.ok("rish path cleared — will use 'rish' from PATH");
       }
     });
 

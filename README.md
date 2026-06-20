@@ -1,24 +1,32 @@
 # devbuddy
 
-> **v1.0.0** — AI-powered dev CLI with unified chat + agent REPL, **streaming responses**, **DevBuddy as an MCP server**, **Ollama support (no API key needed)**, 9 providers, sub-agents, **commit/review/doctor** commands, and dual-channel auto-update. Inspired by Gemini CLI, Qwen CLI, OpenClaude, Hermes, Aider, Cline — still smaller than all of them.
+> **v1.1.0** — AI-powered dev CLI with unified chat + agent REPL, **streaming responses**, **DevBuddy as an MCP server**, **phone control (ADB/Shizuku)**, **Ollama support (no API key needed)**, 9 providers, sub-agents, **commit/review/doctor** commands, and dual-channel auto-update. Inspired by Gemini CLI, Qwen CLI, OpenClaude, Hermes, Aider, Cline, ClosePaw — still smaller than all of them.
 
-[![Version](https://img.shields.io/badge/version-1.0.0-cyan)](#)
+[![Version](https://img.shields.io/badge/version-1.1.0-cyan)](#)
 [![License](https://img.shields.io/badge/license-MIT-blue)](#)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-green)](#)
 
 ---
 
-## 🎉 v1.0.0 — Major release
+## What's new in v1.1.0
 
-- 📡 **DevBuddy as an MCP server** (`devbuddy act-as-mcp`) — expose DevBuddy's capabilities (chat, file ops, shell, todos, config) as MCP tools. Other MCP clients (Claude Desktop, etc.) can connect via SSE or stdio.
-- 🌊 **Streaming responses** — `devbuddy ask` and the unified REPL now stream tokens as they arrive (uses OpenAI-compatible SSE). Anthropic/Cohere fall back to simulated streaming.
-- 🦙 **Ollama auth fix** — Ollama no longer requires an API key. `isAuthenticated()` returns true for ollama automatically. Use it locally with zero setup.
-- 📝 **`devbuddy commit`** — generate conventional commit messages from staged/unstaged git diff. Optional `--apply` to commit directly.
-- 🔍 **`devbuddy review`** — AI code review on staged/unstaged changes or a specific commit. Streaming output.
-- 🩺 **`devbuddy doctor`** — diagnose setup issues (Node version, config, API keys, MCP, network, git, experimental flags).
-- 📜 **`devbuddy history`** — show command history across sessions (`--grep <pattern>`, `--clear`).
+- 📱 **Phone control (experimental)** (`devbuddy phone`) — AI agent can control your Android phone via ADB or Shizuku (rish). 11 tools: tap, swipe, type, screenshot, launch apps, run shell, etc. **Ollama-only** for safety (no cloud APIs see your phone screen). Strict trust gate: type `I trust this AI` to enable. Inspired by [ClosePaw](https://github.com/imoonkey/closepaw).
+
+## What was new in v1.0.1
+
+- ✎ **Custom model ID during onboarding** — model picker now has a "Type your own model ID…" option for downloaded Ollama models, fine-tunes, or any unlisted model.
+- 🔧 **`devbuddy auth model [name]`** — set or show the active provider's model. Accepts any model ID (no list restriction).
+
+## What was new in v1.0.0 (major)
+
+- 📡 **DevBuddy as an MCP server** (`devbuddy act-as-mcp`) — expose DevBuddy's capabilities as MCP tools. SSE + stdio transports. 12 exposed tools.
+- 🌊 **Streaming responses** — `devbuddy ask` and the unified REPL stream tokens as they arrive.
+- 🦙 **Ollama auth fix** — Ollama no longer requires an API key. Use it locally with zero setup.
+- 📝 **`devbuddy commit`** — generate conventional commit messages from git diff.
+- 🔍 **`devbuddy review`** — AI code review on staged/unstaged/commit (streaming).
+- 🩺 **`devbuddy doctor`** — diagnose setup issues.
+- 📜 **`devbuddy history`** — command history across sessions.
 - 🎨 **Theme support** — `config set theme dark|light|auto`.
-- 📜 **`scripts/update-v1.0.0.sh`** — tagged update script for the dual-channel auto-updater.
 
 ## What was new in v0.5.5
 
@@ -92,6 +100,11 @@ devbuddy ask "hello"          # uses local ollama
 devbuddy config set experimentalActAsMcp true
 devbuddy act-as-mcp           # starts SSE server on :8765
 # Other MCP clients can now connect to http://127.0.0.1:8765/sse
+
+# 7. Phone control (experimental, Ollama-only)
+devbuddy phone enable         # type "I trust this AI" to confirm
+devbuddy --phone              # unified REPL with phone tools
+devbuddy agent run --phone "open WhatsApp and send a message to Mom"
 ```
 
 ---
@@ -220,8 +233,26 @@ devbuddy auth                          # status
 devbuddy auth providers                # list all 9 providers
 devbuddy auth set <key>                # set key for active provider
 devbuddy auth set <key> --provider groq
+devbuddy auth add <provider> <key>     # add key without switching (v0.5+)
+devbuddy auth switch <provider>        # switch active provider (v0.5+)
+devbuddy auth model [name]             # set/show model — any ID works (v1.0.1+)
+devbuddy auth model llama3.2:8b        # custom model IDs allowed
 devbuddy auth clear [provider]
 ```
+
+### `devbuddy phone` (v1.1.0, experimental)
+AI phone control via ADB/Shizuku. **Ollama-only.**
+
+```bash
+devbuddy phone enable                  # strict trust gate (type "I trust this AI")
+devbuddy phone enable --mode rish      # Shizuku mode (on-phone)
+devbuddy phone status                  # show config + connectivity
+devbuddy phone test                    # test connectivity
+devbuddy phone devices                 # list connected devices
+devbuddy phone disable                 # disable
+```
+
+Then use with `devbuddy --phone` or `devbuddy agent run --phone "<task>"`.
 
 ### `devbuddy todo`
 Quick local todos with priorities. **Offline — no AI needed.**
@@ -434,6 +465,98 @@ devbuddy history --clear         # clear history
 
 ---
 
+## Phone control (experimental, v1.1.0)
+
+⚠️ **Experimental + dangerous.** Lets the AI agent control your Android phone via ADB or Shizuku (rish). **Ollama-only** for safety — no cloud APIs see your phone screen.
+
+### Enable (strict trust gate)
+
+```bash
+# 1. Switch to Ollama (required)
+devbuddy onboard          # pick ollama
+# (or) devbuddy auth switch ollama
+
+# 2. Enable phone control
+devbuddy phone enable
+# → shows all 11 tools
+# → checks ADB/rish connectivity
+# → type "I trust this AI" verbatim to confirm
+```
+
+### Use
+
+```bash
+# Unified REPL with phone tools
+devbuddy --phone
+
+# One-shot agent with phone tools
+devbuddy agent run --phone "open WhatsApp and send a message to Mom"
+devbuddy agent run --phone "take a screenshot and tell me what's on screen"
+devbuddy agent run --phone "open settings and turn on battery saver"
+```
+
+### 11 phone tools
+
+| Tool | Description | Tags |
+|------|-------------|------|
+| `phone_devices` | List connected devices / verify Shizuku | parallel-safe |
+| `phone_screenshot` | Capture screenshot to `.devbuddy/phone-screenshots/` | — |
+| `phone_tap` | Tap at (x, y) | confirm |
+| `phone_long_press` | Long-press at (x, y) | confirm |
+| `phone_swipe` | Swipe from (x1,y1) to (x2,y2) | confirm |
+| `phone_type` | Type text into focused field | confirm |
+| `phone_key` | Send key event (home, back, power, etc.) | confirm |
+| `phone_launch_app` | Launch app by package name | confirm |
+| `phone_list_apps` | List installed apps | parallel-safe |
+| `phone_current_app` | Get focused app's package name | parallel-safe |
+| `phone_shell` | Run arbitrary shell command | confirm, **DANGEROUS** |
+
+### Two control modes
+
+- **`adb`** (default) — DevBuddy runs on PC, phone connected via USB or WiFi (`adb connect <ip>:5555`). Commands run via `adb shell ...`.
+- **`rish`** — DevBuddy runs on the phone itself (e.g. Termux), uses [Shizuku](https://shizuku.rikka.app/) for ADB-level access without root. Commands run via `rish ...`.
+
+```bash
+devbuddy phone enable --mode rish   # for on-phone Shizuku mode
+devbuddy phone enable --mode adb    # for PC→phone ADB mode (default)
+```
+
+### Management
+
+```bash
+devbuddy phone status    # show config + connectivity
+devbuddy phone test      # test connectivity only
+devbuddy phone devices   # list connected devices (ADB mode)
+devbuddy phone disable   # disable phone control
+```
+
+### Safety
+
+1. **Ollama-only** — phone control sends screen content to the AI. Ollama runs locally, so no data leaves your machine. Cloud APIs (OpenAI, Anthropic, etc.) would receive your phone screen, which is unsafe.
+2. **Strict trust gate** — `devbuddy phone enable` lists all 11 tools with their tags, checks connectivity, then requires typing `I trust this AI` verbatim.
+3. **`phone_shell` blocks** `rm -rf /`, `dd if=`, `mkfs` commands.
+4. **All mutating tools** (tap, swipe, type, key, launch, shell) prompt for confirmation by default. Use `--yolo` to skip (DANGEROUS).
+
+### Prerequisites
+
+**ADB mode:**
+- `adb` installed (`apt install adb` / `brew install adb`)
+- Phone has USB debugging enabled (Developer Options → USB Debugging)
+- Phone connected via USB, or `adb connect <phone-ip>:5555` for WiFi
+- Verify: `adb devices` should list your phone
+
+**rish mode:**
+- [Shizuku](https://shizuku.rikka.app/) app installed and running on the phone
+- `rish` shell on your PATH (Shizuku provides this)
+- DevBuddy running on the phone itself (e.g. in Termux)
+
+### Inspired by
+
+- [ClosePaw](https://github.com/imoonkey/closepaw) — open-source Android phone-use agent. Their toolset (mobile_action, open_app, system_button, shell, screenshot) maps directly to DevBuddy's 11 phone tools.
+- [Shizuku](https://shizuku.rikka.app/) — ADB-level access without root, for on-phone mode.
+
+---
+
 ## Project context: DEVBUDDY.md
 
 Drop a `DEVBUDDY.md` in your project root. Its contents are appended to the system prompt of every AI command run from that directory.
@@ -465,36 +588,49 @@ Run `devbuddy init` to create a template.
 
 ## How the agentic harness evolved (design notes)
 
-v0.4 takes more from the open-source agentic harnesses we admire, while staying smaller than any of them:
+DevBuddy takes inspiration from many open-source agentic harnesses, while staying smaller than any of them:
 
 **From OpenClaude:**
 - ✅ Single-file agent core, tool registry as plain object
 - ✅ Plain-text tool-call protocol (works with small models)
+- ✅ Sub-agent pattern (agent-as-tool, v0.5+)
 
 **From Hermes:**
 - ✅ Provider abstraction (9 providers, one interface)
+- ✅ `grep_search` + `web_fetch` tools (v0.5.5+)
 
-**From Aider (NEW in v0.4):**
+**From Aider (v0.4+):**
 - ✅ Auto-rollback on failure — mutations in a failed step are reverted
 - ✅ Per-file backups recorded before each mutation
+- ✅ `git_diff` tool (v0.5.5+)
 
-**From Cline (NEW in v0.4):**
+**From Cline (v0.4+):**
 - ✅ Planner mode — agent writes a plan first, then executes step-by-step
 - ✅ Progress display between steps
 - ✅ Project memory file (`.devbuddy/memory.md`)
+- ✅ `memory_update` tool (v0.5.5+)
 
-**From Continue (NEW in v0.4):**
+**From Continue (v0.4+):**
 - ✅ `DEVBUDDY.md` project context (similar to `.continuerc.json`)
 - ✅ Auto-discovery from CWD with home fallback
 
+**From Gemini CLI / Qwen CLI (v0.5+):**
+- ✅ Inline auto-suggest in the REPL (fish-shell style)
+- ✅ Unified REPL (chat + agent in one session, switch with `/agent`)
+- ✅ Welcome banner design
+
+**From ClosePaw (v1.1.0+):**
+- ✅ Phone control toolset (`phone_tap`, `phone_swipe`, `phone_type`, `phone_screenshot`, `phone_launch_app`, `phone_shell`)
+- ✅ Two control modes (ADB for PC→phone, Shizuku/rish for on-phone)
+- ✅ Safety-first design (Ollama-only, trust gate)
+
 **What we still don't have (by design):**
-- ❌ Sub-agents (we're one agent, one loop)
 - ❌ Tree-of-thought planning (linear plans only)
 - ❌ Vector embeddings / RAG (use `DEVBUDDY.md` instead)
-- ❌ Multi-modal (text only)
+- ❌ Multi-modal (text only — phone screenshots are saved as files, not sent to the model)
 - ❌ Plugin system (yet)
 
-The core is still ~400 lines (up from ~200 in v0.3, but with 6× the features).
+The core is ~6800 lines across 56 files, with 2 runtime deps (`chalk`, `commander`). Still smaller than OpenClaude, Hermes, Aider, Cline, Continue, or ClosePaw.
 
 ---
 
@@ -503,10 +639,14 @@ The core is still ~400 lines (up from ~200 in v0.3, but with 6× the features).
 - `~/.devbuddy/config.json` — settings
 - `~/.devbuddy/chats/<id>.json` — global chats
 - `~/.devbuddy/DEVBUDDY.md` — global project context (fallback)
-- `./.devbuddy/chats/<id>.json` — project-scoped chats
-- `./.devbuddy/memory.md` — agent project memory
-- `./DEVBUDDY.md` — project context (preferred)
+- `~/.devbuddy/mcp.json` — MCP server config (global)
+- `~/.devbuddy/history.jsonl` — command history
 - `~/.devbuddy/todos.json` — todos
+- `./.devbuddy/chats/<id>.json` — project-scoped chats
+- `./.devbuddy/mcp.json` — MCP server config (project)
+- `./.devbuddy/memory.md` — agent project memory
+- `./.devbuddy/phone-screenshots/` — phone screenshots (v1.1.0+)
+- `./DEVBUDDY.md` — project context (preferred)
 
 ---
 
@@ -521,15 +661,22 @@ The core is still ~400 lines (up from ~200 in v0.3, but with 6× the features).
 | `Agent mode is currently OFF` | `devbuddy agent toggle` |
 | `Refusing to access path outside allowed roots` | Run from your project root, or use `--allow <dir>` |
 | `old_string appears N times; needs to be unique` | Make the search string more specific (include surrounding context) |
+| `Phone control is Ollama-only` | Switch: `devbuddy auth switch ollama` |
+| `Phone not accessible in 'adb' mode` | Install adb, enable USB debugging, connect phone |
+| `act-as-mcp is experimental and gated` | `devbuddy config set experimentalActAsMcp true` |
+| Run `devbuddy doctor` to diagnose other issues |
 
 ---
 
 ## Roadmap
 
 - [ ] Publish to npm as `devbuddy`
-- [ ] Streaming responses (currently wait for full reply)
-- [ ] `devbuddy commit` — generate commit messages from `git diff`
-- [ ] `devbuddy review` — AI code review on a PR/diff
+- [x] ~~Streaming responses~~ ✅ v1.0.0
+- [x] ~~`devbuddy commit`~~ ✅ v1.0.0
+- [x] ~~`devbuddy review`~~ ✅ v1.0.0
+- [x] ~~Phone control~~ ✅ v1.1.0
+- [ ] iOS support for phone control (via AppleScript/Shortcuts — limited)
+- [ ] Multi-modal (send phone screenshots directly to vision models)
 - [ ] Plugin system for custom tools
 
 ## Contributing
@@ -557,35 +704,63 @@ See [CHANGELOG.md](./CHANGELOG.md).
 DevBuddy-CLI/
 ├── bin/
 │   └── devbuddy.js
+├── scripts/
+│   ├── update-v1.1.0.sh          # tagged update script (dual-channel updater)
+│   ├── packages-v1.1.0.json      # package manifest (empty)
+│   └── ... (update-v0.5.0.sh, update-v1.0.0.sh, update-v1.0.1.sh, etc.)
 ├── src/
-│   ├── index.js              # entrypoint + auto-update wiring
-│   ├── ui.js                 # minimal theme + spinner
-│   ├── store.js              # config + todos persistence
-│   ├── prompt.js             # DEVBUDDY.md loader (NEW)
+│   ├── index.js                  # entrypoint + auto-update wiring + --phone flag
+│   ├── ui.js                     # minimal theme + spinner
+│   ├── store.js                  # config + todos persistence (v1.1 schema)
+│   ├── prompt.js                 # DEVBUDDY.md loader
 │   ├── ai/
-│   │   └── providers.js      # 9-provider adapter layer
+│   │   └── providers.js          # 9-provider adapter + streaming (completeStream)
 │   ├── agent/
-│   │   ├── core.js           # planner loop with auto-rollback + parallel reads
-│   │   └── tools.js          # 8 tools with allowlist + rollback tracking
+│   │   ├── core.js               # planner loop + auto-rollback + parallel reads + phone/MCP registration
+│   │   ├── tools.js              # 13 built-in tools + allowlist + rollback tracking
+│   │   ├── phone-tools.js        # 11 ADB/Shizuku phone tools (v1.1.0)
+│   │   ├── mcp-bridge.js         # MCP → agent tool bridge
+│   │   └── subagent/
+│   │       └── index.js          # sub-agent system (agent-as-tool)
 │   ├── chat/
-│   │   └── store.js          # chat persistence (global + project scopes)
+│   │   └── store.js              # chat persistence (global + project scopes)
+│   ├── mcp/
+│   │   ├── client.js             # MCP client (stdio + HTTP/SSE)
+│   │   ├── config.js             # MCP server config loader (layered)
+│   │   └── server.js             # DevBuddy as MCP server (act-as-mcp)
+│   ├── remote/
+│   │   ├── ssh.js                # experimental SSH remote-AI connector
+│   │   └── claude-desktop.js     # experimental Claude Desktop connector
+│   ├── ui/
+│   │   └── suggest.js            # fish-shell-style inline auto-suggest
 │   ├── updater/
-│   │   └── updater.js        # GitHub release checker
+│   │   └── updater.js            # dual-channel auto-update (.sh + releases)
 │   └── commands/
-│       ├── onboard.js
-│       ├── init.js           # DEVBUDDY.md template (NEW)
-│       ├── chat.js           # REPL + subcommands (NEW)
-│       ├── ask.js
-│       ├── auth.js
-│       ├── agent.js          # + --allow, --plan flags
-│       ├── config.js
+│       ├── onboard.js            # interactive setup wizard + multi-key + custom model
+│       ├── repl.js               # unified chat + agent REPL (v0.5.1+)
+│       ├── init.js               # DEVBUDDY.md template
+│       ├── chat.js               # chat alias + subcommands (list/show/branch/export/rm)
+│       ├── ask.js                # streaming AI Q&A
+│       ├── auth.js               # multi-provider key management + auth model
+│       ├── agent.js              # agent run/toggle/status (--allow, --plan, --phone)
+│       ├── phone.js              # phone control enable/disable/status/test (v1.1.0)
+│       ├── mcp.js                # MCP server management
+│       ├── act-as-mcp.js         # DevBuddy as MCP server
+│       ├── remote.js             # experimental remote-AI (SSH/Claude)
+│       ├── commit.js             # conventional commit message from git diff
+│       ├── review.js             # AI code review (streaming)
+│       ├── doctor.js             # setup diagnostics (11 checks)
+│       ├── history.js            # command history
+│       ├── config.js             # settings management
 │       ├── explain.js
 │       ├── summarize.js
 │       ├── todo.js
 │       ├── translate.js
-│       └── update.js
+│       └── update.js             # manual update check
 ├── CHANGELOG.md
 ├── package.json
 ├── LICENSE
 └── README.md
 ```
+
+**Stats:** 56 files, ~6800 lines of source, 2 runtime deps (`chalk`, `commander`).

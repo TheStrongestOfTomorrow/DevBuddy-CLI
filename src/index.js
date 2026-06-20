@@ -34,6 +34,7 @@ import { register as registerCommit }     from "./commands/commit.js";
 import { register as registerReview }     from "./commands/review.js";
 import { register as registerDoctor }     from "./commands/doctor.js";
 import { register as registerHistory }    from "./commands/history.js";
+import { register as registerPhone }      from "./commands/phone.js";
 import { launchUnified }                  from "./commands/repl.js";
 
 // Commands that should NOT trigger the auto-update check (they're either
@@ -41,7 +42,7 @@ import { launchUnified }                  from "./commands/repl.js";
 // where an update prompt would interrupt the session).
 const SKIP_UPDATE_FOR = new Set([
   "onboard", "update", "auth", "config", "todo", "chat", "init", "help", "mcp", "remote",
-  "act-as-mcp", "commit", "review", "doctor", "history",
+  "act-as-mcp", "commit", "review", "doctor", "history", "phone",
   undefined, // no command → launches unified REPL
 ]);
 
@@ -69,6 +70,7 @@ export function run() {
       "  mcp                     Manage MCP servers (connect to external MCP servers).\n" +
       "  act-as-mcp              ⚠️ Run DevBuddy itself as an MCP server.\n" +
       "  remote                  ⚠️ Experimental remote-AI (SSH / Claude Desktop).\n" +
+      "  phone                   ⚠️ Experimental: AI phone control via ADB/Shizuku (Ollama only).\n" +
       "  todo                    Manage quick todos.\n" +
       "  auth                    Manage API keys across providers.\n" +
       "  config                  View and edit settings.\n" +
@@ -86,6 +88,7 @@ export function run() {
     .option("-c, --continue", "Resume the most recent chat.")
     .option("--chat <id>", "Resume a specific chat by ID.")
     .option("--allow <dir>", "Grant access to an additional directory (agent mode). Repeatable.", (v, acc) => { (acc || []).push(v); return acc; }, [])
+    .option("--phone", "Launch unified REPL with phone control enabled (experimental, requires `devbuddy phone enable`).")
     .action(async (opts) => {
       // Default action when no subcommand given: launch unified REPL.
       await launchUnified(opts);
@@ -119,6 +122,7 @@ export function run() {
   registerReview(program);
   registerDoctor(program);
   registerHistory(program);
+  registerPhone(program);
 
   // Note: no need for "show help if no command given" — the default action
   // on the program itself launches the unified REPL when no subcommand matches.

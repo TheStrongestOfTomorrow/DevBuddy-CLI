@@ -99,11 +99,12 @@ function parseSlash(input) {
 
 // Run an agent task inline (within the unified REPL).
 // The agent's summary becomes the assistant message in the chat record.
-async function runAgentInline(task, { yolo, model, allow, cfg, chat }) {
+async function runAgentInline(task, { yolo, model, allow, cfg, chat, phone }) {
   ui.blank();
   ui.heading(`agent task`);
   ui.muted(`task: ${task}`);
   if (yolo) ui.muted(`mode: yolo (no confirms)`);
+  if (phone) ui.warn(`⚠️ phone control active — agent can control your phone`);
   ui.blank();
 
   let result;
@@ -113,6 +114,7 @@ async function runAgentInline(task, { yolo, model, allow, cfg, chat }) {
       maxSteps: cfg.agentMaxSteps || 20,
       model,
       allow: allow || [],
+      phone: phone || false,
     });
   } catch (e) {
     result = { steps: 0, summary: `(agent failed: ${e.message})`, history: [] };
@@ -328,7 +330,7 @@ export async function runUnifiedRepl({ chat: initialChat, opts = {} }) {
     // --- Regular message ---
     if (mode === "agent") {
       // Run as agent task
-      await runAgentInline(trimmed, { yolo, model: modelOverride, allow, cfg, chat });
+      await runAgentInline(trimmed, { yolo, model: modelOverride, allow, cfg, chat, phone: opts.phone });
       history.push(trimmed);
       continue;
     }

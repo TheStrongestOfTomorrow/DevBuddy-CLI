@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] — 2026-06-20
+
+### Added
+
+- **Phone control (experimental)** — AI agent can control your Android phone via ADB or Shizuku (rish). Inspired by [ClosePaw](https://github.com/imoonkey/closepaw), an open-source Android phone-use agent.
+
+  - **11 phone tools:** `phone_tap`, `phone_long_press`, `phone_swipe`, `phone_type`, `phone_key` (home/back/etc.), `phone_screenshot`, `phone_launch_app`, `phone_list_apps`, `phone_current_app`, `phone_shell` (dangerous), `phone_devices`.
+  - **Two control modes:**
+    - `adb` — DevBuddy on PC, phone connected via USB/WiFi (`adb shell input tap`, etc.)
+    - `rish` — DevBuddy on phone (Termux + Shizuku), no PC needed
+  - **Ollama-only** for safety — phone control sends screen content to the AI. Ollama runs locally, so no data leaves your machine. Cloud APIs would receive your phone screen, which is unsafe.
+  - **Strict trust gate** (`devbuddy phone enable`):
+    1. Active provider must be Ollama
+    2. All 11 phone tools are listed for review (with confirm/dangerous/parallel-safe tags)
+    3. ADB (or rish) must be available + device connected
+    4. User must type "I trust this AI" verbatim
+  - **New `devbuddy phone` command:** `enable`, `disable`, `status`, `test`, `devices`
+  - **New `--phone` flag** on `devbuddy` (unified REPL) and `devbuddy agent run`
+  - Phone tools registered into agent when `--phone` is passed or `phoneControlEnabled` is true
+  - Safety: `phone_shell` blocks `rm -rf /`, `dd if=`, `mkfs` commands
+  - New config keys: `phoneControlEnabled`, `phoneControlTrusted`, `phoneControlMode`, `phoneControlEnabledAt`
+
+- **`scripts/update-v1.1.0.sh`** — tagged update script.
+
+### Inspired by
+
+- **ClosePaw** (https://github.com/imoonkey/closepaw) — phone-use agent toolset design (mobile_action, open_app, system_button, shell, screenshot)
+- **Shizuku** (https://shizuku.rikka.app/) — ADB-level access without root, for on-phone mode
+
+---
+
 ## [1.0.1] — 2026-06-19
 
 ### Hotfix

@@ -20,6 +20,7 @@
 import { complete } from "../ai/providers.js";
 import { TOOLS, TOOL_NAMES, getToolNames, toolsForPrompt, executeTool, executeToolsParallel, resetSession, rollbackStep, clearBackups, getAllowedRoots, registerSubAgentTool } from "./tools.js";
 import { registerMcpTools, cleanupMcp } from "./mcp-bridge.js";
+import { registerPhoneTools, unregisterPhoneTools } from "./phone-tools.js";
 import { systemPromptSuffix, findDevbuddyMd } from "../prompt.js";
 import * as ui from "../ui.js";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
@@ -166,6 +167,23 @@ export async function runAgent(task, opts = {}) {
     }
   } catch (e) {
     ui.warn(`mcp discovery failed: ${e.message}`);
+  }
+
+  // Register phone control tools if enabled (--phone flag or config)
+  let phoneToolCount = 0;
+  const { loadConfig } = await import("../store.js");
+  const cfg = loadConfig();
+  const phoneEnabled = (opts.phone || cfg.phoneControlEnabled) && cfg.phoneControlTrusted;
+  if (phoneEnabled) {
+    const { getActiveProviderId } = await import("../ai/providers.js");
+    const providerId = getActiveProviderId();
+    if (providerId !== "ollama") {
+      ui.warn(`phone control requires Ollama (active: ${providerId}). phone tools NOT registered.`);
+    } else {
+      const phoneMode = cfg.phoneControlMode || "adb";
+      phoneToolCount = await registerPhoneTools(phoneMode);
+      ui.warn(`⚠️ phone control ACTIVE (${phoneMode} mode, ${phoneToolCount} tools). Agent can control your phone.`);
+    }
   }
 
   // Load project memory (if any)
@@ -347,6 +365,9 @@ export async function runAgent(task, opts = {}) {
 
   // Disconnect MCP servers
   try { await cleanupMcp(); } catch {}
+  if (phoneToolCount > 0) {
+    try { await unregisterPhoneTools(); } catch {}
+  }
 
   ui.blank();
   ui.heading("summary");

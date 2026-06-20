@@ -16,6 +16,7 @@ export function register(program) {
     .option("-m, --model <name>", "Override the active model for this run.")
     .option("--plan", "Planner mode: agent writes a plan first, then executes step by step.")
     .option("--allow <dir>", "Grant access to an additional directory. Repeatable.", (val, acc) => { (acc || []).push(val); return acc; }, [])
+    .option("--phone", "Enable phone control tools (requires `devbuddy phone enable` + Ollama).")
     .action(async (taskParts, opts) => {
       if (!isOnboarded()) {
         ui.error(onboardingRequiredMessage());
@@ -53,6 +54,7 @@ export function register(program) {
           model: opts.model,
           plan: !!opts.plan,
           allow: opts.allow || [],
+          phone: !!opts.phone,
         });
       } catch (e) {
         ui.error(e?.message || String(e));

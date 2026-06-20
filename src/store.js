@@ -42,6 +42,12 @@ const DEFAULT_CONFIG = {
   experimentalRemoteAI: false,   // SSH / Claude Desktop remote connector
   experimentalActAsMcp: false,   // run devbuddy as an MCP server
 
+  // Phone control (experimental, Ollama-only, strict trust gate)
+  phoneControlEnabled: false,    // master toggle
+  phoneControlTrusted: false,    // user typed "I trust this AI"
+  phoneControlMode: "adb",       // 'adb' (PC→phone) | 'rish' (on-phone Shizuku)
+  phoneControlEnabledAt: null,   // timestamp
+
   createdAt: null,
 };
 

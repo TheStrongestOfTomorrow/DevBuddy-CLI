@@ -1,16 +1,20 @@
 # devbuddy
 
-> **v1.1.2** — AI-powered dev CLI with unified chat + agent REPL, **streaming responses**, **DevBuddy as an MCP server**, **phone control (ADB/Shizuku)**, **Ollama support (no API key needed)**, 9 providers, sub-agents, **commit/review/doctor** commands, and dual-channel auto-update. Inspired by Gemini CLI, Qwen CLI, OpenClaude, Hermes, Aider, Cline, ClosePaw — still smaller than all of them.
+> **v1.1.3** — AI-powered dev CLI with unified chat + agent REPL, **streaming responses**, **thinking mode toggle**, **DevBuddy as an MCP server**, **phone control (ADB/Shizuku)**, **Ollama support (no API key needed)**, 9 providers, sub-agents, **commit/review/doctor** commands, and dual-channel auto-update. Inspired by Gemini CLI, Qwen CLI, OpenClaude, Hermes, Aider, Cline, ClosePaw — still smaller than all of them.
 
-[![Version](https://img.shields.io/badge/version-1.1.2-cyan)](#)
+[![Version](https://img.shields.io/badge/version-1.1.3-cyan)](#)
 [![License](https://img.shields.io/badge/license-MIT-blue)](#)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-green)](#)
 
 ---
 
-## What's new in v1.1.2 (hotfix)
+## What's new in v1.1.3
 
-- 📱 **Custom rish path** — `devbuddy phone rish-path <path>` lets you set a custom path to the `rish` binary (Shizuku), for when it's not on PATH. Also available as `--rish-path` flag on `phone enable`. Useful because rish can be in different locations on different devices.
+- 🧠 **Thinking mode toggle** — `/thinking` in the chat REPL toggles step-by-step reasoning on/off. When on, the AI shows its reasoning before the final answer. When off (default), direct answers. Also `devbuddy ask --thinking` for one-shot use. `summarize`, `explain`, `translate` stay no-thinking by default.
+
+## What was new in v1.1.2 (hotfix)
+
+- 📱 **Custom rish path** — `devbuddy phone rish-path <path>` lets you set a custom path to the `rish` binary (Shizuku), for when it's not on PATH.
 
 ## What was new in v1.1.1 (hotfix)
 

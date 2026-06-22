@@ -1,6 +1,6 @@
 {
   "name": "devbuddy",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "description": "DevBuddy v1.0 — AI-powered dev CLI with unified chat+agent REPL, streaming, MCP server (act-as-mcp), 9 providers, sub-agents, Ollama support, conventional commit generation, code review, doctor diagnostics.",
   "type": "module",
   "main": "src/index.js",

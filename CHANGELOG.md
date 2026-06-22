@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.3] — 2026-06-20
+
+### Added
+
+- **Thinking mode toggle** in the chat REPL. `/thinking` turns it on/off. When on, the system prompt includes "Think step-by-step before answering. Show your reasoning, then give the final answer." When off (default), direct answers.
+- **`devbuddy ask --thinking`** flag for one-shot use.
+- `summarize`, `explain`, `translate` stay **no-thinking by default** (direct answers, no step-by-step).
+- Welcome banner shows `+ thinking` when thinking mode is on.
+- `/mode` shows thinking status.
+- `/thinking` added to slash command auto-suggest list.
+
+---
+
 ## [1.1.2] — 2026-06-20
 
 ### Hotfix

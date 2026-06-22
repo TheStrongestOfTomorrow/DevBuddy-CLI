@@ -34,6 +34,7 @@ export function register(program) {
     .option("--max-tokens <n>", "Max output tokens.", "1024")
     .option("--json", "Output raw JSON instead of pretty text.")
     .option("--no-stream", "Disable streaming (wait for full response).")
+    .option("--thinking", "Enable step-by-step thinking (default: off for one-shot commands).")
     .action(async (questionParts, opts) => {
       requireOnboarding();
       const question = questionParts.join(" ").trim();
@@ -47,6 +48,7 @@ export function register(program) {
         opts.system ||
         `You are a helpful, concise developer assistant. Answer in ${cfg.language}. ` +
         `Prefer clear explanations over long essays. Use code blocks when useful.` +
+        (opts.thinking ? ` Think step-by-step before answering. Show your reasoning, then give the final answer.` : "") +
         systemPromptSuffix();
 
       if (dbMd) ui.muted(`using project context: ${dbMd.path}`);

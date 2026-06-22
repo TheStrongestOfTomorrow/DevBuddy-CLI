@@ -56,7 +56,7 @@ function estimateTokens(messages) {
   return Math.ceil(chars / 4);
 }
 
-function renderWelcome(chat, { model, devbuddyMd, cfg, mode, yolo }) {
+function renderWelcome(chat, { model, devbuddyMd, cfg, mode, yolo, thinking }) {
   ui.blank();
   ui.title("╭─ devbuddy ────────────────────────────");
   ui.muted(`│`);
@@ -65,7 +65,7 @@ function renderWelcome(chat, { model, devbuddyMd, cfg, mode, yolo }) {
   ui.muted(`│  scope:  ${chat.scope}${chat.scopePath ? ` (${chat.scopePath})` : ""}`);
   ui.muted(`│  model:  ${model}`);
   ui.muted(`│  prov:   ${cfg.provider || "(none)"}`);
-  ui.muted(`│  mode:   ${mode === "agent" ? ui.theme.warn("AGENT" + (yolo ? " (yolo)" : "")) : "chat"}`);
+  ui.muted(`│  mode:   ${mode === "agent" ? ui.theme.warn("AGENT" + (yolo ? " (yolo)" : "")) : "chat"}${thinking ? ui.theme.accent(" + thinking") : ""}`);
   if (devbuddyMd) {
     ui.muted(`│  ctx:    ${devbuddyMd.path}`);
   }
@@ -137,6 +137,7 @@ export async function runUnifiedRepl({ chat: initialChat, opts = {} }) {
   const cfg = loadConfig();
   let mode = opts.mode || "chat";        // 'chat' | 'agent'
   let yolo = !!opts.yolo;
+  let thinking = false;                   // thinking mode (step-by-step reasoning)
   let modelOverride = opts.model || initialChat.model || getActiveModel();
   let allow = opts.allow || [];
   const devbuddyMd = findDevbuddyMd();
@@ -144,7 +145,7 @@ export async function runUnifiedRepl({ chat: initialChat, opts = {} }) {
   warnRateLimit();
 
   let chat = initialChat;
-  renderWelcome(chat, { model: modelOverride, devbuddyMd, cfg, mode, yolo });
+  renderWelcome(chat, { model: modelOverride, devbuddyMd, cfg, mode, yolo, thinking });
 
   // Replay history if resuming
   if (chat.messages.length > 0) {
@@ -189,7 +190,7 @@ export async function runUnifiedRepl({ chat: initialChat, opts = {} }) {
 
         case "clear":
           console.clear();
-          renderWelcome(chat, { model: modelOverride, devbuddyMd, cfg, mode, yolo });
+          renderWelcome(chat, { model: modelOverride, devbuddyMd, cfg, mode, yolo, thinking });
           continue;
 
         case "save":
@@ -236,7 +237,17 @@ export async function runUnifiedRepl({ chat: initialChat, opts = {} }) {
           continue;
 
         case "mode":
-          ui.muted(`current mode: ${mode}${mode === "agent" && yolo ? " (yolo)" : ""}`);
+          ui.muted(`current mode: ${mode}${mode === "agent" && yolo ? " (yolo)" : ""}${thinking ? " (thinking)" : ""}`);
+          continue;
+
+        case "thinking":
+          thinking = !thinking;
+          if (thinking) {
+            ui.ok("thinking mode ON — AI will reason step-by-step before answering.");
+            ui.muted("  (toggle off with /thinking again)");
+          } else {
+            ui.ok("thinking mode OFF — direct answers.");
+          }
           continue;
 
         case "summary": {
@@ -341,7 +352,9 @@ export async function runUnifiedRepl({ chat: initialChat, opts = {} }) {
 
     const baseSystem = opts.system ||
       `You are a helpful, concise developer assistant. Answer in ${cfg.language}. ` +
-      `Use code blocks when useful.` + systemPromptSuffix();
+      `Use code blocks when useful.` +
+      (thinking ? ` Think step-by-step before answering. Show your reasoning, then give the final answer.` : "") +
+      systemPromptSuffix();
 
     const convo = chat.messages.slice(-20).map((m) => ({
       role: m.role,

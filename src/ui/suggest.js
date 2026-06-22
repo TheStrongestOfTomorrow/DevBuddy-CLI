@@ -15,21 +15,23 @@ import { dirname, resolve, basename } from "node:path";
 // --- Suggestion sources ---
 
 export const SLASH_COMMANDS = [
-  { cmd: "/help",    desc: "show available commands" },
-  { cmd: "/exit",    desc: "save and exit" },
-  { cmd: "/quit",    desc: "save and exit" },
-  { cmd: "/clear",   desc: "clear screen" },
-  { cmd: "/save",    desc: "force-save current chat" },
-  { cmd: "/summary", desc: "AI summarizes the chat so far" },
-  { cmd: "/model",   desc: "switch model for subsequent turns" },
-  { cmd: "/system",  desc: "set/override system prompt" },
-  { cmd: "/branch",  desc: "branch the chat at current point" },
-  { cmd: "/title",   desc: "rename the chat" },
-  { cmd: "/history", desc: "message count + tokens estimate" },
-  { cmd: "/context", desc: "show DEVBUDDY.md path" },
-  { cmd: "/reset",   desc: "clear conversation history (keeps chat)" },
-  { cmd: "/agents",  desc: "list available sub-agent models" },
-  { cmd: "/cost",    desc: "estimate tokens used so far" },
+  { cmd: "/help",     desc: "show available commands" },
+  { cmd: "/exit",     desc: "save and exit" },
+  { cmd: "/quit",     desc: "save and exit" },
+  { cmd: "/clear",    desc: "clear screen" },
+  { cmd: "/save",     desc: "force-save current chat" },
+  { cmd: "/summary",  desc: "AI summarizes the chat so far" },
+  { cmd: "/model",    desc: "switch model for subsequent turns" },
+  { cmd: "/system",   desc: "set/override system prompt" },
+  { cmd: "/branch",   desc: "branch the chat at current point" },
+  { cmd: "/title",    desc: "rename the chat" },
+  { cmd: "/history",  desc: "message count + tokens estimate" },
+  { cmd: "/context",  desc: "show DEVBUDDY.md path" },
+  { cmd: "/reset",    desc: "clear conversation history (keeps chat)" },
+  { cmd: "/agents",   desc: "list available sub-agent models" },
+  { cmd: "/cost",     desc: "estimate tokens used so far" },
+  { cmd: "/thinking", desc: "toggle thinking mode (step-by-step reasoning)" },
+  { cmd: "/mode",     desc: "show current mode" },
 ];
 
 function fileCompletions(partial) {

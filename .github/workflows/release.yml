@@ -18,8 +18,6 @@ permissions:
 
 jobs:
   release:
-    # The workflow creates a release commit itself. Skip that commit so we do
-    # not recursively create v1.1.5, v1.1.6, ... forever.
     if: ${{ github.event_name == 'workflow_dispatch' || !startsWith(github.event.head_commit.message, 'chore: release v') }}
     runs-on: ubuntu-latest
 
@@ -41,11 +39,24 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Determine version
-        id: version
+      - name: Determine release mode
+        id: mode
         shell: bash
         run: |
           CURRENT=$(node -p "require('./package.json').version")
+          TAG="v$CURRENT"
+
+          if git rev-parse "refs/tags/$TAG" >/dev/null 2>&1; then
+            TAG_EXISTS=true
+          else
+            TAG_EXISTS=false
+          fi
+
+          if grep -q "^## \[$CURRENT\]" CHANGELOG.md 2>/dev/null; then
+            CHANGELOG_HAS_VERSION=true
+          else
+            CHANGELOG_HAS_VERSION=false
+          fi
 
           if git rev-parse HEAD^ >/dev/null 2>&1; then
             PREVIOUS=$(git show HEAD^:package.json 2>/dev/null | node -e '
@@ -57,17 +68,27 @@ jobs:
             PREVIOUS="$CURRENT"
           fi
 
-          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
-          echo "previous=$PREVIOUS" >> "$GITHUB_OUTPUT"
-
           if [ "$CURRENT" != "$PREVIOUS" ]; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
+            VERSION_CHANGED=true
           else
-            echo "changed=false" >> "$GITHUB_OUTPUT"
+            VERSION_CHANGED=false
           fi
 
+          # If a release version is already declared in CHANGELOG but has no
+          # tag yet, publish that exact version. This bootstraps v1.1.4.
+          if [ "$TAG_EXISTS" = false ] && [ "$CHANGELOG_HAS_VERSION" = true ]; then
+            RELEASE_EXISTING=true
+          else
+            RELEASE_EXISTING=false
+          fi
+
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "tag_exists=$TAG_EXISTS" >> "$GITHUB_OUTPUT"
+          echo "version_changed=$VERSION_CHANGED" >> "$GITHUB_OUTPUT"
+          echo "release_existing=$RELEASE_EXISTING" >> "$GITHUB_OUTPUT"
+
       - name: Bump version automatically
-        if: steps.version.outputs.changed != 'true'
+        if: steps.mode.outputs.version_changed != 'true' && steps.mode.outputs.release_existing != 'true'
         run: |
           BUMP="${{ inputs.bump || 'patch' }}"
           npm version "$BUMP" --no-git-tag-version
@@ -76,8 +97,8 @@ jobs:
         id: release
         run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
-      - name: Update changelog for automated release
-        if: steps.version.outputs.changed != 'true'
+      - name: Update changelog for automated bump
+        if: steps.mode.outputs.version_changed != 'true' && steps.mode.outputs.release_existing != 'true'
         env:
           VERSION: ${{ steps.release.outputs.version }}
         run: |
@@ -93,8 +114,8 @@ jobs:
           }
           NODE
 
-      - name: Commit and tag release
-        if: steps.version.outputs.changed != 'true'
+      - name: Commit and tag automated release
+        if: steps.mode.outputs.version_changed != 'true' && steps.mode.outputs.release_existing != 'true'
         env:
           VERSION: ${{ steps.release.outputs.version }}
         run: |
@@ -103,13 +124,13 @@ jobs:
           git tag -a "v$VERSION" -m "DevBuddy v$VERSION"
           git push origin main --follow-tags
 
-      - name: Verify release tag exists for manually versioned release
-        if: steps.version.outputs.changed == 'true'
+      - name: Tag manually versioned release
+        if: steps.mode.outputs.version_changed == 'true' || steps.mode.outputs.release_existing == 'true'
         env:
           VERSION: ${{ steps.release.outputs.version }}
         run: |
-          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
-            echo "Tag v$VERSION already exists; using it."
+          if git rev-parse "refs/tags/v$VERSION" >/dev/null 2>&1; then
+            echo "Tag v$VERSION already exists."
           else
             git tag -a "v$VERSION" -m "DevBuddy v$VERSION"
             git push origin "v$VERSION"

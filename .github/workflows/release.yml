@@ -1,0 +1,80 @@
+name: Release DevBuddy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump to apply before publishing
+        required: false
+        default: patch
+        type: choice
+        options: [patch, minor, major]
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://npm.pkg.github.com
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Detect version change
+        id: version
+        shell: bash
+        run: |
+          CURRENT=$(node -p "require('./package.json').version")
+          if git rev-parse HEAD^ >/dev/null 2>&1; then
+            PREVIOUS=$(git show HEAD^:package.json 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).version))' || echo "$CURRENT")
+          else
+            PREVIOUS="$CURRENT"
+          fi
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "previous=$PREVIOUS" >> "$GITHUB_OUTPUT"
+          if [ "$CURRENT" != "$PREVIOUS" ]; then echo "changed=true" >> "$GITHUB_OUTPUT"; else echo "changed=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Bump patch version
+        if: steps.version.outputs.changed != 'true'
+        run: |
+          npm version "${{ inputs.bump || 'patch' }}" --no-git-tag-version
+          VERSION=$(node -p "require('./package.json').version")
+          printf '\n## [%s] — %s\n\n### Changed\n\n- Automated release build.\n' "$VERSION" "$(date -u +%Y-%m-%d)" >> /tmp/release-entry.md
+          node - <<'NODE'
+          const fs = require('fs');
+          const entry = fs.readFileSync('/tmp/release-entry.md', 'utf8');
+          const file = fs.readFileSync('CHANGELOG.md', 'utf8');
+          const marker = 'All notable changes to this project will be documented here.\n';
+          fs.writeFileSync('CHANGELOG.md', file.replace(marker, marker + entry));
+          NODE
+          git add package.json package-lock.json CHANGELOG.md 2>/dev/null || git add package.json CHANGELOG.md
+          git commit -m "chore: release v$VERSION"
+          git tag "v$VERSION"
+          git push origin main --follow-tags
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Test package
+        run: npm test
+
+      - name: Publish to GitHub Packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm publish

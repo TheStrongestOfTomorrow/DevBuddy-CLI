@@ -1,6 +1,6 @@
 {
   "name": "@thestrongestoftomorrow/devbuddy",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "description": "AI-powered developer CLI with unified chat+agent REPL, streaming, MCP server, phone control, 9 providers, sub-agents, Ollama support, conventional commit generation, code review, and diagnostics.",
   "type": "module",
   "main": "src/index.js",
@@ -14,7 +14,23 @@
     "start": "node bin/devbuddy.js",
     "test": "node bin/devbuddy.js --help"
   },
-  "keywords": ["cli", "ai", "developer-tools", "assistant", "productivity", "huggingface", "openai", "anthropic", "groq", "ollama", "agent", "sub-agent", "chat", "llm", "agentic"],
+  "keywords": [
+    "cli",
+    "ai",
+    "developer-tools",
+    "assistant",
+    "productivity",
+    "huggingface",
+    "openai",
+    "anthropic",
+    "groq",
+    "ollama",
+    "agent",
+    "sub-agent",
+    "chat",
+    "llm",
+    "agentic"
+  ],
   "author": "TheStrongestOfTomorrow",
   "license": "MIT",
   "homepage": "https://github.com/TheStrongestOfTomorrow/DevBuddy-CLI#readme",

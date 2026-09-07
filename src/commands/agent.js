@@ -16,8 +16,11 @@ export function register(program) {
     .option("-m, --model <name>", "Override the active model for this run.")
     .option("--plan", "Planner mode: agent writes a plan first, then executes step by step.")
     .option("--allow <dir>", "Grant access to an additional directory. Repeatable.", (val, acc) => { (acc || []).push(val); return acc; }, [])
+    // NOTE: --phone also exists at program level (for `devbuddy --phone`),
+    // and commander routes the flag to the program-level option, so the run
+    // action must look it up on the ancestor chain (recheck fix, v1.2.5).
     .option("--phone", "Enable phone control tools (requires `devbuddy phone enable` + Ollama).")
-    .action(async (taskParts, opts) => {
+    .action(async (taskParts, opts, cmd) => {
       if (!isOnboarded()) {
         ui.error(onboardingRequiredMessage());
         process.exit(1);
@@ -28,6 +31,32 @@ export function register(program) {
           "Agent mode is currently OFF.\n" +
           "  Enable with: devbuddy agent toggle\n" +
           "  (or)         devbuddy config set agentEnabled true"
+        );
+        process.exit(1);
+      }
+      // `agent run --phone/--yolo/--allow` also exist on the root program;
+      // commander parses such duplicates as *program-level* global options,
+      // so the run action never sees them in opts. Walk up to the root and
+      // collect the global values (recheck fix, v1.2.5).
+      let globalOpts = {};
+      let c = cmd && cmd.parent;
+      while (c) {
+        globalOpts = { ...globalOpts, ...c.opts() };
+        c = c.parent;
+      }
+      const phoneFlag = !!opts.phone || !!globalOpts.phone;
+      const yoloFlag = !!opts.yolo || !!globalOpts.yolo;
+      const allowList = (opts.allow && opts.allow.length > 0)
+        ? opts.allow
+        : (globalOpts.allow && globalOpts.allow.length > 0 ? globalOpts.allow : []);
+      // --phone without an enabled+trusted phone control: refuse cleanly
+      // instead of silently running without phone tools (recheck, v1.2.5).
+      if (phoneFlag && (!cfg.phoneControlEnabled || !cfg.phoneControlTrusted)) {
+        ui.error(
+          "Phone control is not enabled.\n" +
+          "  Enable it first (Ollama-only + strict trust gate):\n" +
+          "  devbuddy phone enable\n\n" +
+          "  Status: devbuddy phone status"
         );
         process.exit(1);
       }
@@ -49,12 +78,12 @@ export function register(program) {
 
       try {
         await runAgent(task, {
-          yolo: opts.yolo || cfg.agentYolo,
+          yolo: yoloFlag || cfg.agentYolo,
           maxSteps: parseInt(opts.maxSteps, 10) || cfg.agentMaxSteps || 20,
           model: opts.model,
           plan: !!opts.plan,
-          allow: opts.allow || [],
-          phone: !!opts.phone,
+          allow: allowList,
+          phone: phoneFlag,
         });
       } catch (e) {
         ui.error(e?.message || String(e));

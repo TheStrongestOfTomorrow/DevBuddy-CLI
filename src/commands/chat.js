@@ -324,10 +324,26 @@ export function register(program) {
     .option("--agent", "Start directly in agent mode.")
     .option("--yolo", "Skip agent confirmations (DANGEROUS).")
     .option("--allow <dir>", "Grant access to an additional directory (agent mode). Repeatable.", (v, acc) => { (acc || []).push(v); return acc; }, [])
-    .action(async (opts) => {
+    .action(async (opts, cmd) => {
       // Delegate to the unified REPL (same as `devbuddy` with no subcommand).
+      // Recheck fix (v1.2.5): flags that ALSO exist on the root program
+      // (--project, -c, --chat, --agent, --yolo, --allow) are parsed by
+      // commander as program-level global options, so they never reach this
+      // action's opts. Merge them in from the ancestor chain.
+      let globalOpts = {};
+      let c = cmd && cmd.parent;
+      while (c) {
+        globalOpts = { ...globalOpts, ...c.opts() };
+        c = c.parent;
+      }
+      const merged = { ...globalOpts, ...opts };
+      // --allow has a default [] on this command, which would clobber a real
+      // program-level value — keep the non-empty one.
+      if (Array.isArray(opts.allow) && opts.allow.length === 0 && globalOpts.allow && globalOpts.allow.length > 0) {
+        merged.allow = globalOpts.allow;
+      }
       const { launchUnified } = await import("./repl.js");
-      await launchUnified(opts);
+      await launchUnified(merged);
     });
 
   chat

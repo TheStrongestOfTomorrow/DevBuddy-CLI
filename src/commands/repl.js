@@ -395,6 +395,22 @@ export async function runUnifiedRepl({ chat: initialChat, opts = {} }) {
 export async function launchUnified(opts = {}) {
   requireOnboarding();
 
+  // --phone with phone control disabled/untrusted: refuse cleanly instead of
+  // silently launching without phone tools (recheck fix, v1.2.5).
+  if (opts.phone) {
+    const phoneCfg = loadConfig();
+    if (!phoneCfg.phoneControlEnabled || !phoneCfg.phoneControlTrusted) {
+      ui.error(
+        "Phone control is not enabled.\n" +
+        "  Enable it first (requires Ollama + type-to-confirm trust):\n" +
+        "  devbuddy phone enable\n\n" +
+        "  Phone control lets the AI control your Android phone, so it stays OFF\n" +
+        "  until you explicitly enable and trust it. Status: devbuddy phone status"
+      );
+      process.exit(1);
+    }
+  }
+
   let chat;
   if (opts.continue) {
     const list = listChats({ scope: opts.project ? "project" : "all" });

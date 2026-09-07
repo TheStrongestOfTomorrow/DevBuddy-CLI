@@ -35,6 +35,9 @@ export function register(program) {
           ui.blank();
           ui.muted("if this keeps failing (network timeout, rate limit), try:");
           ui.muted("  devbuddy update --force-install   (skips the check, just installs)");
+          // v1.2.5 fix: a failed check used to exit 0, so scripts could not
+          // tell "checked, up to date" from "could not check at all".
+          process.exit(1);
         } else {
           ui.muted(`skipped: ${result.reason || "no update available"}`);
         }

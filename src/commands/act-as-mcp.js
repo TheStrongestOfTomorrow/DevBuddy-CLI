@@ -8,7 +8,11 @@ import { loadConfig } from "../store.js";
 import { runStdioServer, runSseServer } from "../mcp/server.js";
 import * as ui from "../ui.js";
 
-function requireExperimental() {
+// SSE mode can write banners to stdout (normal console output), but in
+// stdio mode stdout IS the JSON-RPC channel — everything there must be
+// protocol messages, so banner text goes to stderr instead (recheck fix,
+// v1.2.5).
+function requireExperimental(stderrOnly = false) {
   const cfg = loadConfig();
   if (!cfg.experimentalActAsMcp) {
     ui.error(
@@ -20,12 +24,16 @@ function requireExperimental() {
     );
     process.exit(1);
   }
-  ui.warn(
+  const text =
     "⚠️  EXPERIMENTAL: running DevBuddy as an MCP server.\n" +
     "    File operations, shell, and config are exposed to MCP clients.\n" +
-    "    Only connect trusted MCP clients."
-  );
-  ui.blank();
+    "    Only connect trusted MCP clients.";
+  if (stderrOnly) {
+    process.stderr.write(ui.theme.warn(text) + "\n\n");
+  } else {
+    ui.warn(text);
+    ui.blank();
+  }
 }
 
 export function register(program) {
@@ -36,10 +44,12 @@ export function register(program) {
     .option("-p, --port <n>", "Port for SSE transport (default: 8765).", "8765")
     .option("--host <host>", "Host for SSE transport (default: 127.0.0.1).", "127.0.0.1")
     .action(async (opts) => {
-      requireExperimental();
+      const stderrOnly = opts.transport === "stdio";
+      requireExperimental(stderrOnly);
 
       if (opts.transport === "stdio") {
-        ui.muted("starting MCP server (stdio transport)…");
+        // stdout is the JSON-RPC channel — keep it clean.
+        process.stderr.write(ui.theme.muted("starting MCP server (stdio transport)…") + "\n");
         await runStdioServer();
       } else if (opts.transport === "sse") {
         const port = parseInt(opts.port, 10) || 8765;

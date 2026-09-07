@@ -222,7 +222,10 @@ export function register(program) {
     .description("Set or show the custom path to the rish binary (for rish mode, when rish is not on PATH).")
     .action((path) => {
       const cfg = loadConfig();
-      if (!path) {
+      // v1.2.5 fix: `phone rish-path ""` never cleared the path — the old
+      // falsy check treated "" like "no argument" and showed help instead.
+      // Only an actually-missing argument (undefined) shows the help.
+      if (path === undefined) {
         ui.muted("current rish path: " + (cfg.phoneControlRishPath || "(not set — uses 'rish' from PATH)"));
         ui.blank();
         ui.muted("set with: devbuddy phone rish-path /path/to/rish");
@@ -234,6 +237,8 @@ export function register(program) {
         ui.muted("  ~/rish                                          (home directory)");
         return;
       }
+      // Store the trimmed value even when empty — that's the documented
+      // way to clear the custom path and fall back to 'rish' from PATH.
       cfg.phoneControlRishPath = path.trim();
       saveConfig(cfg);
       if (cfg.phoneControlRishPath) {

@@ -19,9 +19,8 @@ export function register(program) {
   program
     .command("doctor")
     .description("Diagnose common setup issues.")
-    .action(() => {
-      ui.title(`devbuddy doctor — v${getVersion()}`);
-      ui.blank();
+    .option("--json", "Print a machine-readable JSON report (for scripts / GitHub issues).")
+    .action((opts) => {
       checks.length = 0;
 
       // 1. Node version
@@ -85,8 +84,10 @@ export function register(program) {
       if (mcpServers.length === 0) warn("MCP servers", "none configured (optional)");
       else {
         ok("MCP servers", `${mcpServers.length} configured`);
-        for (const s of mcpServers) {
-          ui.muted(`    - ${s.name} (${s.transport}, ${s.source})`);
+        if (!opts.json) {
+          for (const s of mcpServers) {
+            ui.muted(`    - ${s.name} (${s.transport}, ${s.source})`);
+          }
         }
       }
 
@@ -126,19 +127,42 @@ export function register(program) {
       if (cfg.experimentalRemoteAI) warn("experimentalRemoteAI", "enabled (experimental)");
       if (cfg.experimentalActAsMcp) warn("experimentalActAsMcp", "enabled (experimental)");
 
+      const errs = checks.filter((c) => c.status === "err").length;
+      const warns = checks.filter((c) => c.status === "warn").length;
+
+      // --json: print ONLY JSON (must parse cleanly with JSON.parse).
+      if (opts.json) {
+        const report = {
+          tool: "devbuddy-doctor",
+          version: getVersion(),
+          generatedAt: new Date().toISOString(),
+          summary: {
+            ok: checks.filter((c) => c.status === "ok").length,
+            warn: warns,
+            err: errs,
+          },
+          checks: checks.map((c) => ({ status: c.status, label: c.label, detail: c.detail })),
+        };
+        ui.printJson(report);
+        process.exitCode = errs > 0 ? 1 : 0;
+        return;
+      }
+
       // Render
+      ui.title(`devbuddy doctor — v${getVersion()}`);
+      ui.blank();
       for (const c of checks) {
         const icon = c.status === "ok" ? ui.theme.ok("✓") : c.status === "warn" ? ui.theme.warn("!") : ui.theme.err("✗");
         console.log(`  ${icon} ${ui.theme.heading(c.label.padEnd(20))} ${c.detail}`);
       }
       ui.blank();
-      const errs = checks.filter((c) => c.status === "err").length;
-      const warns = checks.filter((c) => c.status === "warn").length;
       if (errs === 0 && warns === 0) {
         ui.ok("all checks passed.");
       } else {
         ui.warn(`${errs} error(s), ${warns} warning(s).`);
-        if (errs > 0) process.exit(1);
       }
+      ui.blank();
+      ui.muted("run `devbuddy features` for the full per-feature review");
+      if (errs > 0) process.exit(1);
     });
 }

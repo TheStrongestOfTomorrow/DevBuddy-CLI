@@ -35,6 +35,8 @@ import { register as registerReview }     from "./commands/review.js";
 import { register as registerDoctor }     from "./commands/doctor.js";
 import { register as registerHistory }    from "./commands/history.js";
 import { register as registerPhone }      from "./commands/phone.js";
+import { register as registerFeatures }   from "./commands/features.js";
+import { recordCommand }                  from "./commands/history.js";
 import { launchUnified }                  from "./commands/repl.js";
 
 // Commands that should NOT trigger the auto-update check (they're either
@@ -42,7 +44,7 @@ import { launchUnified }                  from "./commands/repl.js";
 // where an update prompt would interrupt the session).
 const SKIP_UPDATE_FOR = new Set([
   "onboard", "update", "auth", "config", "todo", "chat", "init", "help", "mcp", "remote",
-  "act-as-mcp", "commit", "review", "doctor", "history", "phone",
+  "act-as-mcp", "commit", "review", "doctor", "history", "features", "phone",
   undefined, // no command → launches unified REPL
 ]);
 
@@ -52,7 +54,7 @@ export function run() {
   program
     .name("devbuddy")
     .description(
-      "DevBuddy v1.0 — AI-powered dev CLI.\n\n" +
+      "DevBuddy v1.2.5 — AI-powered dev CLI.\n\n" +
       "  devbuddy                Launch unified chat + agent REPL (streaming responses).\n" +
       "  devbuddy --agent        Launch directly in agent mode.\n" +
       "  onboard                 One-time setup wizard (REQUIRED before AI commands).\n" +
@@ -65,6 +67,7 @@ export function run() {
       "  commit                  Generate conventional commit message from git diff.\n" +
       "  review                  AI code review on a diff or commit.\n" +
       "  doctor                  Diagnose setup issues.\n" +
+      "  features                Review every feature — configured? working?\n" +
       "  history                 Show command history.\n" +
       "  init                    Create a DEVBUDDY.md template.\n" +
       "  mcp                     Manage MCP servers (connect to external MCP servers).\n" +
@@ -95,10 +98,45 @@ export function run() {
     });
 
   program.option("--no-color", "Disable colored output.");
-  program.hook("preAction", (cmd) => {
+  program.hook("preAction", (cmd, actionCmd) => {
     const opts = cmd.opts();
     if (opts && opts.color === false) {
       ui.setColorEnabled(false);
+    }
+
+    // v1.2.5: `devbuddy history` never recorded anything — the recorder has
+    // existed since v1.0.0 but nothing ever called it. Record every real
+    // subcommand here (keys are masked inside recordCommand). The bare root
+    // command (unified REPL) is a long-lived interactive session — skipped.
+    try {
+      const action = actionCmd || cmd;
+      if (action.name() !== program.name()) {
+        // Build the full command path, e.g. ["todo", "add"], by walking the
+        // action command up through .parent to the root program.
+        const path = [];
+        let cur = action;
+        while (cur && cur.parent) {
+          path.unshift(cur.name());
+          cur = cur.parent;
+        }
+        if (path.length > 0) {
+          // Reconstruct the args: process.argv minus every path token
+          // (removed once). Bail to [] if a token isn't found, rather than
+          // guessing wrong.
+          let args = process.argv.slice(2);
+          for (const token of path) {
+            const i = args.indexOf(token);
+            if (i === -1) {
+              args = [];
+              break;
+            }
+            args.splice(i, 1);
+          }
+          recordCommand(path.join(" "), args);
+        }
+      }
+    } catch {
+      // History recording must never break a command.
     }
   });
 
@@ -123,6 +161,7 @@ export function run() {
   registerDoctor(program);
   registerHistory(program);
   registerPhone(program);
+  registerFeatures(program);
 
   // Note: no need for "show help if no command given" — the default action
   // on the program itself launches the unified REPL when no subcommand matches.

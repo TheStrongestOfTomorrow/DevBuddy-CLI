@@ -1,14 +1,19 @@
 # devbuddy
 
-> **v1.1.3** — AI-powered dev CLI with unified chat + agent REPL, **streaming responses**, **thinking mode toggle**, **DevBuddy as an MCP server**, **phone control (ADB/Shizuku)**, **Ollama support (no API key needed)**, 9 providers, sub-agents, **commit/review/doctor** commands, and dual-channel auto-update. Inspired by Gemini CLI, Qwen CLI, OpenClaude, Hermes, Aider, Cline, ClosePaw — still smaller than all of them.
+> **v1.1.5** — AI-powered dev CLI with unified chat + agent REPL, **streaming responses**, **thinking mode toggle**, **DevBuddy as an MCP server**, **phone control (ADB/Shizuku)**, **Ollama support (no API key needed)**, 9 providers, sub-agents, **commit/review/doctor** commands, and dual-channel auto-update. Inspired by Gemini CLI, Qwen CLI, OpenClaude, Hermes, Aider, Cline, ClosePaw — still smaller than all of them.
 
-[![Version](https://img.shields.io/badge/version-1.1.3-cyan)](#)
+[![Version](https://img.shields.io/badge/version-1.1.5-cyan)](#)
 [![License](https://img.shields.io/badge/license-MIT-blue)](#)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-green)](#)
 
 ---
 
-## What's new in v1.1.3
+## What's new in v1.1.5 (hotfix)
+
+- 📱 **`phone_devices` honors the custom rish path** — the v1.1.2 `devbuddy phone rish-path` setting was ignored by the `phone_devices` agent tool, which kept probing plain `rish` from PATH and reported "Shizuku not available" even when the custom path worked.
+- 🛠️ **Rish paths with spaces no longer break phone tools** — all phone tools (tap, swipe, type, shell, …) now quote the configured rish path, matching what `phone status` and screenshots already did.
+
+## What was new in v1.1.3
 
 - 🧠 **Thinking mode toggle** — `/thinking` in the chat REPL toggles step-by-step reasoning on/off. When on, the AI shows its reasoning before the final answer. When off (default), direct answers. Also `devbuddy ask --thinking` for one-shot use. `summarize`, `explain`, `translate` stay no-thinking by default.
 

@@ -24,9 +24,12 @@ import * as ui from "../ui.js";
 
 function shellPrefix(mode, rishPath = "") {
   if (mode === "rish") {
-    // Use custom rish path if set, otherwise just 'rish' (from PATH)
+    // Use custom rish path if set, otherwise just 'rish' (from PATH).
+    // Quote the path so locations with spaces work — consistent with
+    // checkPhoneAvailable() and phone_screenshot below. (Fixed in v1.1.5:
+    // an unquoted custom path broke every tool that goes through phoneExec.)
     const rishBin = rishPath || "rish";
-    return rishBin;
+    return `"${rishBin}"`;
   }
   return "adb shell";
 }
@@ -80,7 +83,10 @@ export const PHONE_TOOLS = {
       const mode = opts.phoneMode || "adb";
       const rishPath = opts.rishPath || "";
       if (mode === "rish") {
-        const r = checkPhoneAvailable("rish");
+        // v1.1.5 fix: honor the custom rish path here too — previously this
+        // call dropped rishPath and always probed plain 'rish' from PATH,
+        // so phone_devices failed whenever a custom path was configured.
+        const r = checkPhoneAvailable("rish", rishPath);
         return r.ok ? "Shizuku (rish) is running and accessible." : `Shizuku not available: ${r.error}`;
       }
       const out = execSync("adb devices", { encoding: "utf8", timeout: 5_000, stdio: ["pipe", "pipe", "pipe"] });

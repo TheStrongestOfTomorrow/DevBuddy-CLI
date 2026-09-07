@@ -69,12 +69,57 @@ export function register(program) {
         }
       }
 
+      // --- Value validation (v1.2.5): enum / boolean / integer keys. ---
+      // Previously `theme=banana`, `autoUpdate=yes` or `agentMaxSteps=abc`
+      // were stored silently and broke features later. Validate up front.
+      const ENUM_VALUES = {
+        theme: ["dark", "light", "auto"],
+        autoUpdate: ["off", "prompt", "silent"],
+        summarizeStyle: ["bullets", "paragraphs", "tldr"],
+      };
+      if (ENUM_VALUES[key]) {
+        if (!ENUM_VALUES[key].includes(value)) {
+          ui.error(`invalid value for '${key}': '${value}'. valid: ${ENUM_VALUES[key].join(" | ")}`);
+          process.exit(1);
+        }
+      }
+
+      const BOOLEAN_KEYS = [
+        "stream", "agentEnabled", "agentYolo",
+        "experimentalRemoteAI", "experimentalActAsMcp", "onboardingComplete",
+      ];
+      if (BOOLEAN_KEYS.includes(key) && value !== "true" && value !== "false") {
+        ui.error(`'${key}' is a boolean — use 'devbuddy config set ${key} true' or 'false'.`);
+        process.exit(1);
+      }
+
+      if (key === "agentMaxSteps") {
+        const num = Number(value);
+        if (!(Number.isInteger(num) && num > 0)) {
+          ui.error(`'agentMaxSteps' must be a positive integer (e.g. 'devbuddy config set agentMaxSteps 20').`);
+          process.exit(1);
+        }
+      }
+
       const after = setConfigKey(key, value);
       ui.ok(`${key} = ${JSON.stringify(after[key])}`);
 
       // Helpful follow-up messages
       if (key === "provider") {
-        ui.muted(`  switched to ${value}. set its key with: devbuddy auth set <key>`);
+        if (value === "ollama") {
+          ui.muted("  switched to ollama — runs locally, no API key needed.");
+        } else {
+          ui.muted(`  switched to ${value}. set its key with: devbuddy auth set <key>`);
+          // v1.2.5: switching to a provider with no key used to silently
+          // break every AI command afterwards — warn right away.
+          const stored = after.providers && after.providers[value] && after.providers[value].apiKey;
+          const envVar = PROVIDERS[value] && PROVIDERS[value].envVar;
+          const envKey = envVar ? process.env[envVar] : "";
+          if (!stored && !envKey) {
+            ui.warn(`  ${PROVIDERS[value].name} has no API key yet — AI commands will fail until you add one:`);
+            ui.warn(`  devbuddy auth set <key>    (or)    devbuddy auth add ${value} <key>`);
+          }
+        }
       }
       if (key === "agentEnabled" && after[key] === true) {
         ui.muted("  now run: devbuddy agent run \"<task>\"");

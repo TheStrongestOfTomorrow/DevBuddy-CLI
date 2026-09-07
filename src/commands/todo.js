@@ -13,6 +13,22 @@ function nextId(todos) {
   return todos.reduce((m, t) => Math.max(m, t.id), 0) + 1;
 }
 
+// Created-at → "2d ago" / "today". Missing or invalid timestamps must not
+// render as "NaNd ago" (v1.2.5 fix) — they get no age suffix instead.
+function ageLabel(t, now) {
+  if (!t.createdAt) return "";
+  const ts = new Date(t.createdAt).getTime();
+  if (Number.isNaN(ts)) return "";
+  const age = Math.floor((now - ts) / 86400000);
+  return age <= 0 ? "today" : `${age}d ago`;
+}
+
+// Sort key for created-at (missing/invalid sorts as oldest).
+function createdAtMs(t) {
+  const ts = new Date(t.createdAt).getTime();
+  return Number.isNaN(ts) ? 0 : ts;
+}
+
 function renderTodos(todos) {
   if (todos.length === 0) {
     ui.muted("  (no todos) — add one with `devbuddy todo add <text>`");
@@ -26,11 +42,11 @@ function renderTodos(todos) {
     const prio = (PRIORITY_LABEL[t.priority] || PRIORITY_LABEL.medium).color(
       t.priority || "medium"
     );
-    const age = Math.floor((now - new Date(t.createdAt)) / 86400000);
-    const ageStr = age <= 0 ? "today" : `${age}d ago`;
+    const ageStr = ageLabel(t, now);
+    const agePart = ageStr ? ` ${ui.theme.muted("· " + ageStr)}` : "";
     const text = t.done ? ui.theme.muted(t.text) : t.text;
     console.log(
-      `  ${status} ${ui.theme.muted("#" + t.id)} ${prio} ${text} ${ui.theme.muted("· " + ageStr)}`
+      `  ${status} ${ui.theme.muted("#" + t.id)} ${prio} ${text}${agePart}`
     );
   }
 }
@@ -46,7 +62,7 @@ function filterAndSort(todos) {
       const pb = order[b.priority] ?? 1;
       if (pa !== pb) return pa - pb;
       // Older first
-      return new Date(a.createdAt) - new Date(b.createdAt);
+      return createdAtMs(a) - createdAtMs(b);
     });
 }
 

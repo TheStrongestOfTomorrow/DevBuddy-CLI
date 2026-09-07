@@ -5,6 +5,15 @@ All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.5] — 2026-09-07
+
+### Hotfix
+
+- Phone control now honors the custom Shizuku `rish` path everywhere: `phone_devices` previously probed plain `rish` from PATH and ignored `devbuddy phone rish-path`, failing even when the custom path worked.
+- Quoted the custom rish path in all phone tool commands so paths containing spaces work.
+
+---
+
 ## [1.1.4] — 2026-08-22
 
 ### Changed

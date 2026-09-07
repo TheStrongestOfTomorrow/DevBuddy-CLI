@@ -1,14 +1,26 @@
 # devbuddy
 
-> **v1.1.5** — AI-powered dev CLI with unified chat + agent REPL, **streaming responses**, **thinking mode toggle**, **DevBuddy as an MCP server**, **phone control (ADB/Shizuku)**, **Ollama support (no API key needed)**, 9 providers, sub-agents, **commit/review/doctor** commands, and dual-channel auto-update. Inspired by Gemini CLI, Qwen CLI, OpenClaude, Hermes, Aider, Cline, ClosePaw — still smaller than all of them.
+> **v1.2.5** — AI-powered dev CLI with unified chat + agent REPL, **streaming responses**, **thinking mode toggle**, **DevBuddy as an MCP server**, **phone control (ADB/Shizuku)**, **Ollama support (no API key needed)**, 9 providers, sub-agents, **commit/review/doctor/features** commands, and dual-channel auto-update. Inspired by Gemini CLI, Qwen CLI, OpenClaude, Hermes, Aider, Cline, ClosePaw — still smaller than all of them.
 
-[![Version](https://img.shields.io/badge/version-1.1.5-cyan)](#)
+[![Version](https://img.shields.io/badge/version-1.2.5-cyan)](#)
 [![License](https://img.shields.io/badge/license-MIT-blue)](#)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-green)](#)
 
 ---
 
-## What's new in v1.1.5 (hotfix)
+## What's new in v1.2.5
+
+- 🩺 **`devbuddy features` — review every feature in one command.** Walks through the whole CLI (core, storage, agent & phone, extras) and marks each feature **✓ configured** · **! not configured** (with the exact command to set it up) · **✗ broken** (configured but failing — file an issue!) · **– off** (optional/experimental). `devbuddy features --json` prints a machine-readable report you can attach to GitHub issues; `--live` also pings your active AI provider end-to-end (~8 tokens). Exits 1 when something is broken, so scripts can use it too.
+- 🎯 **`devbuddy features --category core|storage|agent|extras`** — review just one area of the CLI (great for CI); `--quiet` shows only the `!` / `✗` rows.
+- 📜 **`devbuddy history` actually records now** — the recorder existed since v1.0.0 but was never wired up, so history was always empty. Every command is recorded (API keys masked), and `--grep` / `--clear` finally have data to work on.
+- 📊 **`devbuddy history --stats`** — top commands and commands-per-day, straight from your history file.
+- 🔒 **`config set` validates values** — `theme=banana`, `agentMaxSteps=abc`, or `stream=yes` used to be stored silently and break features later. Now you get a clear error instead.
+- 🩺 **`devbuddy doctor --json`** — machine-readable diagnostics for scripts and GitHub issues.
+- 🛠️ **`chat --agent/--project/-c/--chat/--allow` and `agent run --yolo/--allow/--phone` work now** — commander was silently routing these to the root program's identically-named global options, so the documented `chat` alias flags had never actually taken effect.
+- 🛠️ **`--phone` refuses cleanly when disabled** — instead of pretending phone tools are active while silently running without them; `act-as-mcp --transport stdio` also keeps its stdout free of banner text so MCP clients see pure JSON-RPC.
+- 🧹 **Smaller fixes** — `phone rish-path ""` now actually clears the path; `history --grep "<bad regex>"` gives a friendly error instead of a raw regex crash; `update --check` exits 1 when the check fails so scripts can tell.
+
+## What was new in v1.1.5 (hotfix)
 
 - 📱 **`phone_devices` honors the custom rish path** — the v1.1.2 `devbuddy phone rish-path` setting was ignored by the `phone_devices` agent tool, which kept probing plain `rish` from PATH and reported "Shizuku not available" even when the custom path worked.
 - 🛠️ **Rish paths with spaces no longer break phone tools** — all phone tools (tap, swipe, type, shell, …) now quote the configured rish path, matching what `phone status` and screenshots already did.
@@ -109,6 +121,7 @@ devbuddy ask "what is a closure?"
 devbuddy commit               # generate commit message from git diff
 devbuddy review               # AI code review on staged changes
 devbuddy doctor               # diagnose setup issues
+devbuddy features             # review EVERY feature: configured? working?
 
 # 5. Ollama (no API key needed!)
 devbuddy onboard              # pick ollama, no key needed
@@ -472,7 +485,21 @@ Diagnose setup issues.
 
 ```bash
 devbuddy doctor                  # checks Node, config, keys, MCP, network, git
+devbuddy doctor --json           # machine-readable report (scripts / issues)
 ```
+
+### `devbuddy features` (NEW in v1.2.5)
+Review **every feature** of the CLI in one command — core (node, config, onboarding, provider, API key, model, context), storage (chats, todos, history, MCP), agent & phone, and extras (updater, network, git, remote, act-as-mcp).
+
+```bash
+devbuddy features                # full review
+devbuddy features --json         # machine-readable report (attach to GitHub issues)
+devbuddy features --live         # also ping the active AI provider end-to-end (~8 tokens)
+devbuddy features --category core|storage|agent|extras   # one area only
+devbuddy features --quiet        # only the ! and ✗ rows
+```
+
+Each feature is marked **✓ configured** · **! not configured** (with the exact command to set it up) · **✗ broken** (configured but failing — that's a bug, file an issue) · **– off** (optional/experimental). Exit code is 1 when anything is broken, so scripts can gate on it. Every `!` / `✗` row carries the exact fix command, and `--json` prints a clean report you can paste into a GitHub issue.
 
 ### `devbuddy history`
 Show command history.
@@ -481,8 +508,11 @@ Show command history.
 devbuddy history                 # last 20 commands
 devbuddy history -n 50           # last 50
 devbuddy history --grep "agent"  # filter
+devbuddy history --stats         # top commands + commands/day
 devbuddy history --clear         # clear history
 ```
+
+Every command you run is recorded automatically — including meta commands like `history`, `features`, or `doctor` themselves. API keys are masked in the log: `auth set` / `auth add` keys show as `[masked]`, and any token matching `sk-`/`hf_`/`ghp_`/etc. shapes is masked too.
 
 ---
 
@@ -651,7 +681,7 @@ DevBuddy takes inspiration from many open-source agentic harnesses, while stayin
 - ❌ Multi-modal (text only — phone screenshots are saved as files, not sent to the model)
 - ❌ Plugin system (yet)
 
-The core is ~6800 lines across 56 files, with 2 runtime deps (`chalk`, `commander`). Still smaller than OpenClaude, Hermes, Aider, Cline, Continue, or ClosePaw.
+The core is ~8,500 lines across 40 files (all of `src/`), with 2 runtime deps (`chalk`, `commander`). Still smaller than OpenClaude, Hermes, Aider, Cline, Continue, or ClosePaw.
 
 ---
 
@@ -685,6 +715,7 @@ The core is ~6800 lines across 56 files, with 2 runtime deps (`chalk`, `commande
 | `Phone control is Ollama-only` | Switch: `devbuddy auth switch ollama` |
 | `Phone not accessible in 'adb' mode` | Install adb, enable USB debugging, connect phone |
 | `act-as-mcp is experimental and gated` | `devbuddy config set experimentalActAsMcp true` |
+| Not sure if a feature is configured or working | `devbuddy features` (add `--json` for a report to attach to issues) |
 | Run `devbuddy doctor` to diagnose other issues |
 
 ---
@@ -726,9 +757,9 @@ DevBuddy-CLI/
 ├── bin/
 │   └── devbuddy.js
 ├── scripts/
-│   ├── update-v1.1.0.sh          # tagged update script (dual-channel updater)
-│   ├── packages-v1.1.0.json      # package manifest (empty)
-│   └── ... (update-v0.5.0.sh, update-v1.0.0.sh, update-v1.0.1.sh, etc.)
+│   ├── update-v1.2.5.sh          # tagged update script (dual-channel updater)
+│   ├── packages-v1.2.5.json      # package manifest (empty)
+│   └── ... (update-v0.5.0.sh, update-v1.0.0.sh, update-v1.1.5.sh, etc.)
 ├── src/
 │   ├── index.js                  # entrypoint + auto-update wiring + --phone flag
 │   ├── ui.js                     # minimal theme + spinner
@@ -770,8 +801,9 @@ DevBuddy-CLI/
 │       ├── remote.js             # experimental remote-AI (SSH/Claude)
 │       ├── commit.js             # conventional commit message from git diff
 │       ├── review.js             # AI code review (streaming)
-│       ├── doctor.js             # setup diagnostics (11 checks)
-│       ├── history.js            # command history
+│       ├── doctor.js             # setup diagnostics (11 checks, --json)
+│       ├── features.js           # feature-by-feature review (v1.2.5)
+│       ├── history.js            # command history (recording + stats)
 │       ├── config.js             # settings management
 │       ├── explain.js
 │       ├── summarize.js
@@ -784,4 +816,4 @@ DevBuddy-CLI/
 └── README.md
 ```
 
-**Stats:** 56 files, ~6800 lines of source, 2 runtime deps (`chalk`, `commander`).
+**Stats:** 40 files (all of `src/`), ~8,500 lines of source, 2 runtime deps (`chalk`, `commander`).

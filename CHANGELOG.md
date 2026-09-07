@@ -5,6 +5,28 @@ All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.5] — 2026-09-07
+
+### Added
+
+- `devbuddy features` — a feature-by-feature review of the entire CLI. For every feature (core, storage, agent & phone, extras) it reports ✓ configured / ! not configured / ✗ broken / – off, with the exact command to fix each one. `--json` prints a machine-readable report to attach to GitHub issues; `--live` also pings the active AI provider end-to-end. Exits 1 when something is broken, so it can be used in scripts.
+- `devbuddy features --category core|storage|agent|extras` filters the review to a single area; `--quiet` shows only the `!` / `✗` rows.
+- `devbuddy doctor --json` prints a machine-readable diagnostics report (for scripts / GitHub issues).
+- `devbuddy history --stats` shows your top commands and commands-per-day activity.
+
+### Fixed
+
+- `devbuddy history` never recorded anything — the recorder existed since v1.0.0 but was never wired up. Every command is now recorded (API keys are masked) and `--grep` / `--clear` work over real data.
+- `config set` validated nothing — `theme=banana`, `agentMaxSteps=abc`, or `stream=yes` were silently stored and broke features later. Enum / boolean / number keys are now validated with a clear error.
+- `devbuddy phone rish-path ""` never actually cleared the rish path (documented, but a falsy check made it a no-op).
+- `history --grep "<bad regex>"` printed a raw regex error and exited 0; now a clear message and exit 1.
+- `devbuddy update --check` exited 0 even when the check itself failed; now exits 1 so scripts can detect it.
+- `chat --agent` / `--project` / `-c` / `--chat` / `--allow` and `agent run --yolo` / `--allow` / `--phone` were silently ignored — commander routed them to the root program's identically-named global options. They are now honored (the REPL flags were documented since v0.4 and never worked via the `chat` alias).
+- `--phone` (REPL and `agent run`) now refuses cleanly when phone control is disabled, instead of silently running without phone tools.
+- `act-as-mcp --transport stdio` printed its banner to stdout, corrupting the JSON-RPC channel for MCP clients; banner text now goes to stderr.
+
+---
+
 ## [1.1.5] — 2026-09-07
 
 ### Hotfix

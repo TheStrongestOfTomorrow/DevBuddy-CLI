@@ -1,22 +1,22 @@
 // Provider abstraction layer.
-//
-// Design: one OpenAI-compatible adapter covers most providers (HF, OpenAI,
-// Groq, OpenRouter, Together, Mistral, Ollama). Native adapters for Anthropic
-// and Cohere (their APIs are not OpenAI-compatible).
-//
-// Inspired by: OpenClaude (minimal agent core), Hermes (provider abstraction),
-// but stripped down to ~300 lines instead of thousands.
+// Supports built-in and user-defined custom providers.
+// Connection types supported:
+//  - openai / openai_chat: /chat/completions (OpenAI Chat Completions API format)
+//  - openai_completions: /completions (OpenAI Legacy Completions API format)
+//  - openai_responses: /responses (OpenAI Responses API format)
+//  - anthropic / anthropic_messages: /v1/messages (Anthropic Messages API format)
+//  - cohere: /chat (Cohere API format)
 
 import * as ui from "../ui.js";
-import { loadConfig } from "../store.js";
+import { loadConfig, getCustomProviders, getNamedKeys } from "../store.js";
 
-// --- Provider registry -----------------------------------------------------
+// --- Built-in Provider registry --------------------------------------------
 
-export const PROVIDERS = {
+export const BUILTIN_PROVIDERS = {
   huggingface: {
     id: "huggingface",
     name: "HuggingFace",
-    type: "openai",
+    type: "openai_chat",
     baseUrl: "https://router.huggingface.co/v1",
     defaultModel: "mistralai/Mistral-7B-Instruct-v0.3",
     envVar: "HF_TOKEN",
@@ -35,7 +35,7 @@ export const PROVIDERS = {
   openai: {
     id: "openai",
     name: "OpenAI",
-    type: "openai",
+    type: "openai_chat",
     baseUrl: "https://api.openai.com/v1",
     defaultModel: "gpt-4o-mini",
     envVar: "OPENAI_API_KEY",
@@ -48,7 +48,7 @@ export const PROVIDERS = {
   anthropic: {
     id: "anthropic",
     name: "Anthropic",
-    type: "anthropic",
+    type: "anthropic_messages",
     baseUrl: "https://api.anthropic.com",
     defaultModel: "claude-3-5-sonnet-20241022",
     envVar: "ANTHROPIC_API_KEY",
@@ -65,7 +65,7 @@ export const PROVIDERS = {
   groq: {
     id: "groq",
     name: "Groq",
-    type: "openai",
+    type: "openai_chat",
     baseUrl: "https://api.groq.com/openai/v1",
     defaultModel: "llama-3.3-70b-versatile",
     envVar: "GROQ_API_KEY",
@@ -83,7 +83,7 @@ export const PROVIDERS = {
   openrouter: {
     id: "openrouter",
     name: "OpenRouter",
-    type: "openai",
+    type: "openai_chat",
     baseUrl: "https://openrouter.ai/api/v1",
     defaultModel: "openai/gpt-4o-mini",
     envVar: "OPENROUTER_API_KEY",
@@ -102,7 +102,7 @@ export const PROVIDERS = {
   ollama: {
     id: "ollama",
     name: "Ollama (local)",
-    type: "openai",
+    type: "openai_chat",
     baseUrl: "http://localhost:11434/v1",
     defaultModel: "llama3.2",
     envVar: "OLLAMA_API_KEY",
@@ -115,7 +115,7 @@ export const PROVIDERS = {
   together: {
     id: "together",
     name: "Together AI",
-    type: "openai",
+    type: "openai_chat",
     baseUrl: "https://api.together.xyz/v1",
     defaultModel: "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
     envVar: "TOGETHER_API_KEY",
@@ -132,7 +132,7 @@ export const PROVIDERS = {
   mistral: {
     id: "mistral",
     name: "Mistral La Plateforme",
-    type: "openai",
+    type: "openai_chat",
     baseUrl: "https://api.mistral.ai/v1",
     defaultModel: "mistral-small-latest",
     envVar: "MISTRAL_API_KEY",
@@ -157,11 +157,48 @@ export const PROVIDERS = {
   },
 };
 
-export const PROVIDER_IDS = Object.keys(PROVIDERS);
+export function getAllProviders() {
+  const custom = getCustomProviders();
+  return { ...BUILTIN_PROVIDERS, ...custom };
+}
+
+export const PROVIDERS = new Proxy(BUILTIN_PROVIDERS, {
+  get(target, prop) {
+    if (prop in target) return target[prop];
+    const custom = getCustomProviders();
+    return custom[prop] || undefined;
+  },
+  ownKeys() {
+    return Array.from(new Set([...Object.keys(BUILTIN_PROVIDERS), ...Object.keys(getCustomProviders())]));
+  },
+  getOwnPropertyDescriptor(target, prop) {
+    const all = getAllProviders();
+    if (prop in all) {
+      return { enumerable: true, configurable: true, value: all[prop] };
+    }
+    return undefined;
+  }
+});
 
 export function getProvider(id) {
-  return PROVIDERS[id] || null;
+  const all = getAllProviders();
+  return all[id] || null;
 }
+
+export function getProviderIds() {
+  return Object.keys(getAllProviders());
+}
+
+export const PROVIDER_IDS = new Proxy([], {
+  get(target, prop) {
+    const ids = getProviderIds();
+    if (prop === "length") return ids.length;
+    if (prop === Symbol.iterator) return ids[Symbol.iterator].bind(ids);
+    if (typeof prop === "string" && !isNaN(prop)) return ids[Number(prop)];
+    if (typeof ids[prop] === "function") return ids[prop].bind(ids);
+    return ids[prop];
+  }
+});
 
 // --- Config helpers --------------------------------------------------------
 
@@ -171,19 +208,21 @@ export function getActiveProviderId() {
 }
 
 export function getActiveProvider() {
-  return PROVIDERS[getActiveProviderId()] || PROVIDERS.huggingface;
+  const all = getAllProviders();
+  const id = getActiveProviderId();
+  return all[id] || all.huggingface || BUILTIN_PROVIDERS.huggingface;
 }
 
 export function getActiveKey() {
   const cfg = loadConfig();
+  if (cfg.activeKeyName && cfg.namedKeys && cfg.namedKeys[cfg.activeKeyName]) {
+    return cfg.namedKeys[cfg.activeKeyName].key;
+  }
   const provider = getActiveProvider();
   const id = getActiveProviderId();
   const stored = cfg.providers && cfg.providers[id] && cfg.providers[id].apiKey;
-  // Ollama runs locally and typically needs no API key.
-  // Use a dummy bearer so the Authorization header is present (some HTTP
-  // libraries reject requests without it).
   if (id === "ollama") return stored || "ollama";
-  return stored || process.env[provider.envVar] || "";
+  return stored || (provider.envVar ? process.env[provider.envVar] : "") || "";
 }
 
 export function getActiveModel() {
@@ -197,7 +236,6 @@ export function getActiveModel() {
 
 export function isAuthenticated() {
   const id = getActiveProviderId();
-  // Ollama never requires a key — it runs locally.
   if (id === "ollama") return true;
   return Boolean(getActiveKey());
 }
@@ -207,11 +245,43 @@ export function isOnboarded() {
   return Boolean(cfg.onboardingComplete) && Boolean(cfg.provider);
 }
 
+// --- Fetch models dynamically from provider endpoint (/v1/models) ----------
+
+export async function fetchProviderModels(providerId) {
+  const p = getProvider(providerId);
+  if (!p) throw new Error(`Provider '${providerId}' not found.`);
+  const key = getActiveKey();
+  const headers = { "Content-Type": "application/json" };
+  if (key) {
+    if (p.type.startsWith("anthropic")) {
+      headers["x-api-key"] = key;
+      headers["anthropic-version"] = "2023-06-01";
+    } else {
+      headers["Authorization"] = `Bearer ${key}`;
+    }
+  }
+  const url = p.baseUrl.replace(/\/+$/, "") + "/models";
+  try {
+    const res = await fetch(url, { headers, method: "GET" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (Array.isArray(data)) {
+      return data.map((m) => m.id || m.name || String(m));
+    }
+    if (data.data && Array.isArray(data.data)) {
+      return data.data.map((m) => m.id || m.name || String(m));
+    }
+    if (data.models && Array.isArray(data.models)) {
+      return data.models.map((m) => m.id || m.name || String(m));
+    }
+  } catch (e) {
+    // Return standard list fallback
+  }
+  return p.models || [p.defaultModel];
+}
+
 // --- Chat completion dispatch ----------------------------------------------
 
-/**
- * Run a single-turn chat completion against the active provider.
- */
 export async function complete(userPrompt, opts = {}) {
   const provider = getActiveProvider();
   const key = getActiveKey();
@@ -220,7 +290,7 @@ export async function complete(userPrompt, opts = {}) {
   if (!key && provider.id !== "ollama") {
     throw new Error(
       `No API key configured for ${provider.name}.\n` +
-      `  Get one at: ${provider.getKeyUrl}\n` +
+      `  Get one at: ${provider.getKeyUrl || "provider site"}\n` +
       `  Then run: devbuddy onboard   (or)   devbuddy auth set <key>`
     );
   }
@@ -232,20 +302,29 @@ export async function complete(userPrompt, opts = {}) {
         { role: "user", content: userPrompt },
       ];
 
-  switch (provider.type) {
+  const type = provider.type || "openai_chat";
+
+  switch (type) {
     case "openai":
-      return _openaiComplete(provider, key, model, messages, opts);
+    case "openai_chat":
+      return _openaiChatComplete(provider, key, model, messages, opts);
+    case "openai_completions":
+      return _openaiCompletionsComplete(provider, key, model, messages, opts);
+    case "openai_responses":
+      return _openaiResponsesComplete(provider, key, model, messages, opts);
     case "anthropic":
+    case "anthropic_messages":
       return _anthropicComplete(provider, key, model, messages, opts);
     case "cohere":
       return _cohereComplete(provider, key, model, messages, opts);
     default:
-      throw new Error(`Unknown provider type: ${provider.type}`);
+      return _openaiChatComplete(provider, key, model, messages, opts);
   }
 }
 
-async function _openaiComplete(provider, key, model, messages, opts) {
-  const url = provider.baseUrl + "/chat/completions";
+async function _openaiChatComplete(provider, key, model, messages, opts) {
+  const baseUrl = provider.baseUrl.replace(/\/+$/, "");
+  const url = baseUrl.endsWith("/chat/completions") ? baseUrl : baseUrl + "/chat/completions";
   const headers = {
     "Content-Type": "application/json",
     Authorization: `Bearer ${key}`,
@@ -268,6 +347,65 @@ async function _openaiComplete(provider, key, model, messages, opts) {
   return _handleOpenAIResponse(res, provider, model);
 }
 
+async function _openaiCompletionsComplete(provider, key, model, messages, opts) {
+  const baseUrl = provider.baseUrl.replace(/\/+$/, "");
+  const url = baseUrl.endsWith("/completions") ? baseUrl : baseUrl + "/completions";
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${key}`,
+  };
+
+  // Format prompt from messages
+  let promptText = "";
+  for (const m of messages) {
+    promptText += `${m.role.toUpperCase()}: ${m.content}\n`;
+  }
+  promptText += "ASSISTANT:";
+
+  const body = {
+    model,
+    prompt: promptText,
+    max_tokens: opts.maxTokens ?? 1024,
+    temperature: opts.temperature ?? 0.7,
+  };
+
+  const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
+  if (!res.ok) {
+    let detail = await res.text().catch(() => "");
+    throw new Error(`${provider.name} API error (HTTP ${res.status}): ${detail}`);
+  }
+  const data = await res.json();
+  const text = data?.choices?.[0]?.text || data?.choices?.[0]?.message?.content;
+  if (!text || !text.trim()) throw new Error("Empty response from legacy completions endpoint.");
+  return text.trim();
+}
+
+async function _openaiResponsesComplete(provider, key, model, messages, opts) {
+  const baseUrl = provider.baseUrl.replace(/\/+$/, "");
+  const url = baseUrl.endsWith("/responses") ? baseUrl : baseUrl + "/responses";
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${key}`,
+  };
+
+  const body = {
+    model,
+    input: messages,
+    max_output_tokens: opts.maxTokens ?? 1024,
+    temperature: opts.temperature ?? 0.7,
+  };
+
+  const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
+  if (!res.ok) {
+    let detail = await res.text().catch(() => "");
+    throw new Error(`${provider.name} API error (HTTP ${res.status}): ${detail}`);
+  }
+  const data = await res.json();
+  const text = data?.output?.[0]?.content?.[0]?.text || data?.output_text || data?.choices?.[0]?.message?.content;
+  if (!text || !text.trim()) throw new Error("Empty response from responses endpoint.");
+  return text.trim();
+}
+
 async function _handleOpenAIResponse(res, provider, model) {
   if (res.status === 429) {
     const retryAfter = res.headers.get("retry-after") || res.headers.get("Retry-After");
@@ -283,7 +421,7 @@ async function _handleOpenAIResponse(res, provider, model) {
   if (res.status === 401 || res.status === 403) {
     throw new Error(
       `${provider.name} rejected your API key (HTTP ${res.status}). ` +
-      `Check at ${provider.getKeyUrl} and re-run \`devbuddy onboard\` or \`devbuddy auth set <key>\`.`
+      `Check at ${provider.getKeyUrl || "provider console"} and re-run \`devbuddy onboard\` or \`devbuddy auth set <key>\`.`
     );
   }
   if (res.status === 404) {
@@ -309,7 +447,8 @@ async function _handleOpenAIResponse(res, provider, model) {
 }
 
 async function _anthropicComplete(provider, key, model, messages, opts) {
-  const url = provider.baseUrl + "/v1/messages";
+  const baseUrl = provider.baseUrl.replace(/\/+$/, "");
+  const url = baseUrl.endsWith("/v1/messages") ? baseUrl : baseUrl + "/v1/messages";
   let system = "";
   const filtered = [];
   for (const m of messages) {
@@ -335,7 +474,7 @@ async function _anthropicComplete(provider, key, model, messages, opts) {
     throw err;
   }
   if (res.status === 401 || res.status === 403) {
-    throw new Error(`Anthropic rejected your API key (HTTP ${res.status}). Check at ${provider.getKeyUrl}.`);
+    throw new Error(`Anthropic rejected your API key (HTTP ${res.status}). Check at ${provider.getKeyUrl || "console"}.`);
   }
   if (!res.ok) {
     let detail = "";
@@ -354,7 +493,8 @@ async function _anthropicComplete(provider, key, model, messages, opts) {
 }
 
 async function _cohereComplete(provider, key, model, messages, opts) {
-  const url = provider.baseUrl + "/chat";
+  const baseUrl = provider.baseUrl.replace(/\/+$/, "");
+  const url = baseUrl.endsWith("/chat") ? baseUrl : baseUrl + "/chat";
   const headers = {
     "Content-Type": "application/json",
     Authorization: `Bearer ${key}`,
@@ -372,7 +512,7 @@ async function _cohereComplete(provider, key, model, messages, opts) {
     throw err;
   }
   if (res.status === 401 || res.status === 403) {
-    throw new Error(`Cohere rejected your API key (HTTP ${res.status}). Check at ${provider.getKeyUrl}.`);
+    throw new Error(`Cohere rejected your API key (HTTP ${res.status}). Check at ${provider.getKeyUrl || "dashboard"}.`);
   }
   if (!res.ok) {
     let detail = "";
@@ -405,12 +545,6 @@ export async function completeWithRetry(userPrompt, opts = {}, retries = 2) {
   throw lastErr;
 }
 
-/**
- * Stream a chat completion. Calls opts.onToken(text) for each chunk.
- * Falls back to non-streaming + simulated chunking for providers that
- * don't support SSE streaming.
- * @returns {Promise<string>} full text
- */
 export async function completeStream(userPrompt, opts = {}) {
   const provider = getActiveProvider();
   const key = getActiveKey();
@@ -420,15 +554,14 @@ export async function completeStream(userPrompt, opts = {}) {
   if (!key && provider.id !== "ollama") {
     throw new Error(
       `No API key configured for ${provider.name}.\n` +
-      `  Get one at: ${provider.getKeyUrl}\n` +
+      `  Get one at: ${provider.getKeyUrl || "provider site"}\n` +
       `  Then run: devbuddy onboard   (or)   devbuddy auth set <key>`
     );
   }
 
-  // For now, all providers use the OpenAI-compatible streaming format
-  // (Anthropic and Cohere fall back to non-streaming + simulated chunking).
-  if (provider.type === "anthropic" || provider.type === "cohere") {
-    // Fallback: get full response, then emit in chunks
+  const type = provider.type || "openai_chat";
+
+  if (type.startsWith("anthropic") || type === "cohere" || type === "openai_completions" || type === "openai_responses") {
     const full = await complete(userPrompt, opts);
     const words = full.split(/(\s+)/);
     for (const w of words) {
@@ -438,7 +571,6 @@ export async function completeStream(userPrompt, opts = {}) {
     return full;
   }
 
-  // OpenAI-compatible streaming
   const messages = opts.messages
     ? opts.messages
     : [
@@ -446,7 +578,8 @@ export async function completeStream(userPrompt, opts = {}) {
         { role: "user", content: userPrompt },
       ];
 
-  const url = provider.baseUrl + "/chat/completions";
+  const baseUrl = provider.baseUrl.replace(/\/+$/, "");
+  const url = baseUrl.endsWith("/chat/completions") ? baseUrl : baseUrl + "/chat/completions";
   const headers = {
     "Content-Type": "application/json",
     Authorization: `Bearer ${key}`,
@@ -482,7 +615,6 @@ export async function completeStream(userPrompt, opts = {}) {
     throw new Error(`${provider.name} API error (HTTP ${res.status})`);
   }
 
-  // Parse SSE stream
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buf = "";

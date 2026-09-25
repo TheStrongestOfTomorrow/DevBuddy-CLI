@@ -8,15 +8,22 @@ function ensureDir() {
   if (!existsSync(APP_DIR)) mkdirSync(APP_DIR, { recursive: true });
 }
 
-// --- Config (v1.0 schema) ---
+// --- Config schema ---
 const DEFAULT_CONFIG = {
   // Onboarding state
   onboardingComplete: false,
   onboardedAt: null,
 
   // Active provider + per-provider config
-  provider: null,                // 'huggingface' | 'openai' | ... (set during onboard)
+  provider: null,                // 'huggingface' | 'openai' | ... or custom provider ID
   providers: {},                 // { huggingface: { apiKey, model }, openai: { ... }, ... }
+
+  // Custom Providers
+  customProviders: {},           // { "custom-local": { id, name, type, baseUrl, defaultModel, notes } }
+
+  // Named API Keys
+  namedKeys: {},                 // { "key-name": { name, key, provider } }
+  activeKeyName: null,
 
   // Output preferences
   language: "en",
@@ -41,6 +48,8 @@ const DEFAULT_CONFIG = {
   // Experimental features (gated)
   experimentalRemoteAI: false,   // SSH / Claude Desktop remote connector
   experimentalActAsMcp: false,   // run devbuddy as an MCP server
+  experimentalCommandGuard: false, // dry-run preview command execution
+  experimentalCustomEndpoints: false, // raw raw custom endpoint overrides
 
   // Phone control (experimental, Ollama-only, strict trust gate)
   phoneControlEnabled: false,    // master toggle
@@ -52,8 +61,6 @@ const DEFAULT_CONFIG = {
   createdAt: null,
 };
 
-// Migration: if a v0.2 config exists, port hfToken/hfModel/hfBaseUrl into
-// the new providers map and clear old keys.
 function migrateV2ToV3(cfg) {
   if (cfg.hfToken || cfg.hfModel || cfg.hfBaseUrl) {
     if (!cfg.providers) cfg.providers = {};
@@ -67,7 +74,6 @@ function migrateV2ToV3(cfg) {
       delete cfg.hfModel;
     }
     if (cfg.hfBaseUrl) {
-      // Not exposed in v0.3 UI; keep for backward-compat.
       cfg.providers.huggingface.baseUrl = cfg.hfBaseUrl;
       delete cfg.hfBaseUrl;
     }
@@ -91,7 +97,7 @@ export function loadConfig() {
     const raw = readFileSync(CONFIG_FILE, "utf8");
     let parsed = JSON.parse(raw);
     parsed = migrateV2ToV3(parsed);
-    return { ...DEFAULT_CONFIG, ...parsed };
+    return { ...DEFAULT_CONFIG, ...parsed, providers: { ...DEFAULT_CONFIG.providers, ...parsed.providers }, customProviders: { ...parsed.customProviders }, namedKeys: { ...parsed.namedKeys } };
   } catch {
     return { ...DEFAULT_CONFIG };
   }
@@ -140,6 +146,91 @@ export function setProviderModel(providerId, model) {
 export function setActiveProvider(providerId) {
   const cfg = loadConfig();
   cfg.provider = providerId;
+  saveConfig(cfg);
+  return cfg;
+}
+
+// --- Custom Providers ---
+
+export function getCustomProviders() {
+  const cfg = loadConfig();
+  return cfg.customProviders || {};
+}
+
+export function addCustomProvider(prov) {
+  const cfg = loadConfig();
+  if (!cfg.customProviders) cfg.customProviders = {};
+  const id = prov.id.toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+  cfg.customProviders[id] = {
+    id,
+    name: prov.name || id,
+    type: prov.type || "openai_chat",
+    baseUrl: prov.baseUrl.replace(/\/+$/, ""),
+    defaultModel: prov.defaultModel || "default",
+    models: prov.models || [prov.defaultModel || "default"],
+    notes: prov.notes || "Custom user provider",
+    isCustom: true,
+  };
+  saveConfig(cfg);
+  return cfg.customProviders[id];
+}
+
+export function removeCustomProvider(id) {
+  const cfg = loadConfig();
+  if (cfg.customProviders && cfg.customProviders[id]) {
+    delete cfg.customProviders[id];
+    if (cfg.provider === id) {
+      cfg.provider = "huggingface";
+    }
+    saveConfig(cfg);
+    return true;
+  }
+  return false;
+}
+
+// --- Named Keys ---
+
+export function getNamedKeys() {
+  const cfg = loadConfig();
+  return cfg.namedKeys || {};
+}
+
+export function setNamedKey(name, key, provider) {
+  const cfg = loadConfig();
+  if (!cfg.namedKeys) cfg.namedKeys = {};
+  cfg.namedKeys[name] = { name, key, provider };
+  saveConfig(cfg);
+  return cfg.namedKeys[name];
+}
+
+export function removeNamedKey(name) {
+  const cfg = loadConfig();
+  if (cfg.namedKeys && cfg.namedKeys[name]) {
+    delete cfg.namedKeys[name];
+    if (cfg.activeKeyName === name) {
+      cfg.activeKeyName = null;
+    }
+    saveConfig(cfg);
+    return true;
+  }
+  return false;
+}
+
+export function selectNamedKey(name) {
+  const cfg = loadConfig();
+  if (name && (!cfg.namedKeys || !cfg.namedKeys[name])) {
+    throw new Error(`Named key '${name}' does not exist.`);
+  }
+  cfg.activeKeyName = name || null;
+  if (name) {
+    const kObj = cfg.namedKeys[name];
+    if (kObj.provider) {
+      cfg.provider = kObj.provider;
+      if (!cfg.providers) cfg.providers = {};
+      if (!cfg.providers[kObj.provider]) cfg.providers[kObj.provider] = {};
+      cfg.providers[kObj.provider].apiKey = kObj.key;
+    }
+  }
   saveConfig(cfg);
   return cfg;
 }

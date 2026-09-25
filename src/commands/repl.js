@@ -3,28 +3,29 @@
 // Launched by `devbuddy` (no subcommand). User can toggle between modes:
 //   /agent [--yolo]   → switch to agent mode (optional --yolo to skip confirms)
 //   /chat             → switch back to chat mode
-//
-// In chat mode, user messages go to the AI as conversation turns.
-// In agent mode, user messages become agent tasks (run via runAgent inline).
-//
-// Both modes share the same persistent chat record, so you can chat about
-// something, then say /agent "now go implement that" and the agent runs.
+//   /provider <id>    → switch provider on-the-fly
+//   /switch-provider  → pick or switch provider with model selection
+//   /key <name>       → switch named API key
+//   /compact          → compress chat context with AI summary & preserve files/state
 
 import { createChat, getChat, saveChat, appendMessage, listChats, deleteChat, branchChat, exportChatAsMarkdown } from "../chat/store.js";
-import { complete, completeStream, isOnboarded, isAuthenticated, getActiveProvider, getActiveModel, warnRateLimit, PROVIDERS, PROVIDER_IDS, getActiveProviderId } from "../ai/providers.js";
+import { complete, completeStream, isOnboarded, isAuthenticated, getActiveProvider, getActiveModel, warnRateLimit, PROVIDERS, PROVIDER_IDS, getActiveProviderId, fetchProviderModels } from "../ai/providers.js";
 import { loadDevbuddyMd, findDevbuddyMd, systemPromptSuffix } from "../prompt.js";
-import { loadConfig, saveConfig } from "../store.js";
-import { writeFileSync } from "node:fs";
+import { loadConfig, saveConfig, setActiveProvider, setProviderModel, getNamedKeys, selectNamedKey } from "../store.js";
+import { writeFileSync, existsSync } from "node:fs";
 import { readlineWithSuggest, SLASH_COMMANDS as BASE_SLASH_COMMANDS } from "../ui/suggest.js";
 import { runAgent } from "../agent/core.js";
 import * as ui from "../ui.js";
 
-// Add the mode-switching slash commands to the suggest list.
 export const SLASH_COMMANDS = [
   ...BASE_SLASH_COMMANDS,
-  { cmd: "/agent",  desc: "switch to agent mode (optional: --yolo)" },
-  { cmd: "/chat",   desc: "switch to chat mode" },
-  { cmd: "/mode",   desc: "show current mode" },
+  { cmd: "/agent",           desc: "switch to agent mode (optional: --yolo)" },
+  { cmd: "/chat",            desc: "switch to chat mode" },
+  { cmd: "/mode",            desc: "show current mode" },
+  { cmd: "/provider",        desc: "switch AI provider (/provider <id>)" },
+  { cmd: "/switch-provider", desc: "interactive provider & model switch" },
+  { cmd: "/key",             desc: "switch active named API key (/key <name>)" },
+  { cmd: "/compact",         desc: "compress context window with AI summary" },
 ];
 
 function requireOnboarding() {
@@ -65,6 +66,9 @@ function renderWelcome(chat, { model, devbuddyMd, cfg, mode, yolo, thinking }) {
   ui.muted(`│  scope:  ${chat.scope}${chat.scopePath ? ` (${chat.scopePath})` : ""}`);
   ui.muted(`│  model:  ${model}`);
   ui.muted(`│  prov:   ${cfg.provider || "(none)"}`);
+  if (cfg.activeKeyName) {
+    ui.muted(`│  key:    ${cfg.activeKeyName}`);
+  }
   ui.muted(`│  mode:   ${mode === "agent" ? ui.theme.warn("AGENT" + (yolo ? " (yolo)" : "")) : "chat"}${thinking ? ui.theme.accent(" + thinking") : ""}`);
   if (devbuddyMd) {
     ui.muted(`│  ctx:    ${devbuddyMd.path}`);
@@ -82,14 +86,13 @@ function renderHelp(mode) {
   for (const c of SLASH_COMMANDS) {
     const active = (c.cmd === "/agent" && mode === "agent") || (c.cmd === "/chat" && mode === "chat");
     const mark = active ? ui.theme.ok("→") : " ";
-    console.log(`  ${mark} ${ui.theme.value(c.cmd.padEnd(12))} ${ui.theme.muted(c.desc)}`);
+    console.log(`  ${mark} ${ui.theme.value(c.cmd.padEnd(18))} ${ui.theme.muted(c.desc)}`);
   }
   ui.blank();
   ui.muted(`current mode: ${mode}`);
   ui.blank();
 }
 
-// Parse a slash-command line into { cmd, argStr, raw }.
 function parseSlash(input) {
   if (!input.startsWith("/")) return null;
   const [cmd, ...rest] = input.slice(1).split(/\s+/);
@@ -97,8 +100,6 @@ function parseSlash(input) {
   return { cmd: cmd.toLowerCase(), argStr, rest };
 }
 
-// Run an agent task inline (within the unified REPL).
-// The agent's summary becomes the assistant message in the chat record.
 async function runAgentInline(task, { yolo, model, allow, cfg, chat, phone }) {
   ui.blank();
   ui.heading(`agent task`);
@@ -121,7 +122,6 @@ async function runAgentInline(task, { yolo, model, allow, cfg, chat, phone }) {
     ui.error(e?.message || String(e));
   }
 
-  // Record the agent run as a special message in the chat.
   appendMessage(chat, "user", `[agent task] ${task}`);
   appendMessage(chat, "assistant", `[agent result, ${result.steps} steps]\n${result.summary || "(no summary)"}`);
 
@@ -129,6 +129,45 @@ async function runAgentInline(task, { yolo, model, allow, cfg, chat, phone }) {
   ui.ok(`agent done (${result.steps} steps).`);
   ui.blank();
   return result;
+}
+
+// Perform AI context compaction
+async function performCompaction(chat, { modelOverride, cfg }) {
+  if (chat.messages.length < 2) {
+    ui.warn("Not enough conversation history to compact.");
+    return;
+  }
+
+  ui.muted("Compacting conversation history using AI summary...");
+  const rawConvo = chat.messages.map((m) => `${m.role.toUpperCase()}: ${m.content}`).join("\n\n");
+  const compPrompt = "Summarize the key facts, tasks, decisions, code edits, and state of this developer conversation concise and structured." + systemPromptSuffix();
+
+  try {
+    const summary = await complete(rawConvo, {
+      system: compPrompt,
+      model: modelOverride,
+      maxTokens: 500,
+    });
+
+    // Backup current full messages to a archive array in chat JSON
+    if (!chat.uncompressedHistory) chat.uncompressedHistory = [];
+    chat.uncompressedHistory.push(...chat.messages);
+
+    // Rebuild working context with structured boundary marker
+    const compactedMessage = {
+      role: "assistant",
+      content: `[COMPACTED CONTEXT SUMMARY]\n${summary}\n\n[Working session continued with lightweight summary]`
+    };
+
+    chat.messages = [compactedMessage];
+    saveChat(chat);
+
+    ui.ok("Context compacted successfully!");
+    ui.muted(`  Summary tokens: ~${Math.ceil(summary.length / 4)}`);
+    ui.muted("  Full uncompressed history archived to local chat record.");
+  } catch (e) {
+    ui.error(`Compaction failed: ${e.message}`);
+  }
 }
 
 // --- Main unified REPL loop ---
@@ -147,7 +186,6 @@ export async function runUnifiedRepl({ chat: initialChat, opts = {} }) {
   let chat = initialChat;
   renderWelcome(chat, { model: modelOverride, devbuddyMd, cfg, mode, yolo, thinking });
 
-  // Replay history if resuming
   if (chat.messages.length > 0) {
     ui.muted(`(resuming — ${chat.messages.length} messages)`);
     for (const m of chat.messages) {
@@ -173,9 +211,8 @@ export async function runUnifiedRepl({ chat: initialChat, opts = {} }) {
     const trimmed = input.trim();
     if (trimmed === "") continue;
 
-    // --- Slash commands ---
     if (trimmed.startsWith("/")) {
-      const { cmd, argStr } = parseSlash(trimmed);
+      const { cmd, argStr, rest } = parseSlash(trimmed);
 
       switch (cmd) {
         case "exit":
@@ -204,8 +241,62 @@ export async function runUnifiedRepl({ chat: initialChat, opts = {} }) {
           ui.ok("conversation history cleared (chat kept).");
           continue;
 
+        case "compact":
+          await performCompaction(chat, { modelOverride, cfg });
+          continue;
+
+        case "provider":
+        case "switch-provider": {
+          const provId = rest[0];
+          if (provId) {
+            if (!PROVIDERS[provId]) {
+              ui.error(`Unknown provider '${provId}'. Available: ${PROVIDER_IDS.join(", ")}`);
+              continue;
+            }
+            setActiveProvider(provId);
+            const p = PROVIDERS[provId];
+            modelOverride = p.defaultModel;
+            chat.model = modelOverride;
+            saveChat(chat);
+            ui.ok(`Switched to provider '${p.name}' (${provId}). Model set to: ${modelOverride}`);
+          } else {
+            ui.heading("Available Providers");
+            for (const id of PROVIDER_IDS) {
+              const p = PROVIDERS[id];
+              const mark = id === getActiveProviderId() ? ui.theme.ok("→") : " ";
+              console.log(`  ${mark} ${ui.theme.value(id.padEnd(14))} ${p.name}`);
+            }
+            ui.muted("Usage: /provider <id>  (e.g. /provider openai)");
+          }
+          continue;
+        }
+
+        case "key": {
+          if (!argStr) {
+            const keys = getNamedKeys();
+            ui.heading("Named API Keys");
+            for (const [kName, kObj] of Object.entries(keys)) {
+              const mark = kName === cfg.activeKeyName ? ui.theme.ok("→") : " ";
+              console.log(`  ${mark} ${ui.theme.value(kName.padEnd(16))} [${kObj.provider || "any"}]`);
+            }
+            ui.muted("Usage: /key <name>  (or /key clear to unselect)");
+            continue;
+          }
+          if (argStr === "clear") {
+            selectNamedKey(null);
+            ui.ok("Active named key cleared.");
+          } else {
+            try {
+              selectNamedKey(argStr);
+              ui.ok(`Active named key set to '${argStr}'.`);
+            } catch (e) {
+              ui.error(e.message);
+            }
+          }
+          continue;
+        }
+
         case "agent": {
-          // /agent [--yolo] [--allow <dir>]
           const parts = (argStr || "").split(/\s+/).filter(Boolean);
           const newArgs = { yolo, allow: [...allow] };
           for (let i = 0; i < parts.length; i++) {
@@ -264,13 +355,24 @@ export async function runUnifiedRepl({ chat: initialChat, opts = {} }) {
           continue;
         }
 
-        case "model":
-          if (!argStr) { ui.muted(`current model: ${modelOverride}`); continue; }
-          modelOverride = argStr;
-          chat.model = argStr;
+        case "model": {
+          let manual = false;
+          let targetModel = argStr;
+          if (argStr.startsWith("--manual")) {
+            manual = true;
+            targetModel = argStr.replace("--manual", "").trim();
+          }
+          if (!targetModel) {
+            ui.muted(`current model: ${modelOverride}`);
+            ui.muted("  (pass model ID or use `--manual <id>`)");
+            continue;
+          }
+          modelOverride = targetModel;
+          chat.model = targetModel;
           saveChat(chat);
-          ui.ok(`model switched to: ${argStr}`);
+          ui.ok(`model switched to: ${targetModel}${manual ? " (manual override)" : ""}`);
           continue;
+        }
 
         case "system":
           if (!argStr || argStr === "clear") {
@@ -338,15 +440,12 @@ export async function runUnifiedRepl({ chat: initialChat, opts = {} }) {
       }
     }
 
-    // --- Regular message ---
     if (mode === "agent") {
-      // Run as agent task
       await runAgentInline(trimmed, { yolo, model: modelOverride, allow, cfg, chat, phone: opts.phone });
       history.push(trimmed);
       continue;
     }
 
-    // Chat mode: standard conversation turn
     appendMessage(chat, "user", trimmed);
     history.push(trimmed);
 
@@ -365,7 +464,6 @@ export async function runUnifiedRepl({ chat: initialChat, opts = {} }) {
     spinner.start();
 
     try {
-      // Stream the response token-by-token
       ui.blank();
       process.stdout.write(`  ${ui.theme.value("ai")} ${ui.theme.muted("·")} `);
       const reply = await completeStream(null, {
@@ -390,13 +488,9 @@ export async function runUnifiedRepl({ chat: initialChat, opts = {} }) {
   }
 }
 
-// --- Entry point used by `devbuddy` (no subcommand) ---
-
 export async function launchUnified(opts = {}) {
   requireOnboarding();
 
-  // --phone with phone control disabled/untrusted: refuse cleanly instead of
-  // silently launching without phone tools (recheck fix, v1.2.5).
   if (opts.phone) {
     const phoneCfg = loadConfig();
     if (!phoneCfg.phoneControlEnabled || !phoneCfg.phoneControlTrusted) {
@@ -430,7 +524,6 @@ export async function launchUnified(opts = {}) {
     chat = createChat({ scope: opts.project ? "project" : "global" });
   }
 
-  // If user passed --agent, start in agent mode
   if (opts.agent) {
     opts.mode = "agent";
   }

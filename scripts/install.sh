@@ -25,6 +25,7 @@ if command -v git >/dev/null 2>&1; then
   echo "Cloning repository..."
   git clone --depth 1 "$REPO_URL" "$TMP_DIR/devbuddy"
   cd "$TMP_DIR/devbuddy"
+  npm install
   npm install -g .
 else
   echo "Downloading source archive..."
@@ -32,6 +33,7 @@ else
   mkdir -p "$TMP_DIR/devbuddy"
   tar -xzf "$TMP_DIR/devbuddy.tar.gz" -C "$TMP_DIR/devbuddy" --strip-components=1
   cd "$TMP_DIR/devbuddy"
+  npm install
   npm install -g .
 fi
 

@@ -1,10 +1,41 @@
 # devbuddy
 
-> **v1.2.5** — AI-powered dev CLI with unified chat + agent REPL, **streaming responses**, **thinking mode toggle**, **DevBuddy as an MCP server**, **phone control (ADB/Shizuku)**, **Ollama support (no API key needed)**, 9 providers, sub-agents, **commit/review/doctor/features** commands, and dual-channel auto-update. Inspired by Gemini CLI, Qwen CLI, OpenClaude, Hermes, Aider, Cline, ClosePaw — still smaller than all of them.
+> **v1.3.0** — AI-powered dev CLI with unified chat + agent REPL, **streaming responses**, **thinking mode toggle**, **DevBuddy as an MCP server**, **phone control (ADB/Shizuku)**, **Ollama support (no API key needed)**, 9 providers, sub-agents, **commit/review/doctor/features** commands, and dual-channel auto-update. Inspired by Gemini CLI, Qwen CLI, OpenClaude, Hermes, Aider, Cline, ClosePaw — still smaller than all of them.
 
-[![Version](https://img.shields.io/badge/version-1.2.5-cyan)](#)
+[![Version](https://img.shields.io/badge/version-1.3.0-cyan)](#)
 [![License](https://img.shields.io/badge/license-MIT-blue)](#)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-green)](#)
+
+---
+
+## What's new in v1.3.0
+
+- 🔌 **Custom API Providers & Endpoint Types** — create and use custom providers with your own Base URLs and endpoint formats using `devbuddy auth provider add <id> --base-url <url> --type <type>`. Supports `openai_chat` (`/chat/completions`), `openai_completions` (`/completions`), `openai_responses` (`/responses`), and `anthropic_messages` (`/v1/messages`).
+- 🔑 **Named API Key Management** — save, name, and select multiple keys across providers using `devbuddy auth key add <name> <key>`, `devbuddy auth key list`, `devbuddy auth key select <name>`, and `devbuddy auth key remove <name>`.
+- ⚡ **In-Session Provider & Key Switching** — switch active providers and named keys directly inside the chat/agent REPL using `/provider <id>`, `/switch-provider`, and `/key <name>`.
+- 🗜️ **AI Context Compaction (`/compact`)** — compress active conversation history in the REPL into intelligent summaries using AI compaction while maintaining working context and archiving raw local logs.
+- 🛠️ **Config Import / Export & Benchmark Tool** — backup and restore settings with `devbuddy config export` and `devbuddy config import`. Test and compare response latency across configured providers using `devbuddy benchmark`.
+
+### 🔄 Upgrading from v1.1.3 or older (Fixing stuck auto-updates)
+
+If your installation is stuck on v1.1.3 or an older version where auto-update no longer fires:
+
+1. **Uninstall the old version:**
+   ```bash
+   npm uninstall -g @thestrongestoftomorrow/devbuddy
+   # or if installed under the legacy package name:
+   npm uninstall -g devbuddy
+   ```
+
+2. **Re-install the latest v1.3.0 release from GitHub:**
+   ```bash
+   npm install -g TheStrongestOfTomorrow/DevBuddy-CLI
+   ```
+
+3. **Or run force update:**
+   ```bash
+   devbuddy update --force-install
+   ```
 
 ---
 

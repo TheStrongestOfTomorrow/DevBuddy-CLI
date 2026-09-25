@@ -119,20 +119,26 @@ See [CHANGELOG.md](./CHANGELOG.md) for the full diff.
 
 ### Method 1: Curl One-Liner (Recommended for all environments including Termux)
 
+```bash
 curl -fsSL https://raw.githubusercontent.com/TheStrongestOfTomorrow/DevBuddy-CLI/main/scripts/install.sh | bash
+```
 
 ### Method 2: Git Clone & Global Install (Bypasses EALLOWGIT)
 
 If you see npm error code EALLOWGIT when installing directly via GitHub URL:
 
+```bash
 git clone https://github.com/TheStrongestOfTomorrow/DevBuddy-CLI.git
 cd DevBuddy-CLI
 npm install -g .
+```
 
 ### Method 3: Enable Git in npm config
 
+```bash
 npm config set allow-git true
 npm install -g TheStrongestOfTomorrow/DevBuddy-CLI
+```
 
 ### Requirements
 

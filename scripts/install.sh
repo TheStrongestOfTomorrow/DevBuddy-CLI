@@ -25,6 +25,7 @@ if command -v git >/dev/null 2>&1; then
   echo "Cloning repository..."
   git clone --depth 1 "$REPO_URL" "$TMP_DIR/devbuddy"
   cd "$TMP_DIR/devbuddy"
+  npm install
   npm install -g .
 else
   echo "Downloading source archive..."
@@ -32,20 +33,32 @@ else
   mkdir -p "$TMP_DIR/devbuddy"
   tar -xzf "$TMP_DIR/devbuddy.tar.gz" -C "$TMP_DIR/devbuddy" --strip-components=1
   cd "$TMP_DIR/devbuddy"
+  npm install
   npm install -g .
 fi
 
 rm -rf "$TMP_DIR"
 
-NPM_PREFIX="$(npm config get prefix 2>/dev/null || echo "")"
-NPM_BIN="$NPM_PREFIX/bin"
+GLOBAL_ROOT="$(npm root -g 2>/dev/null || echo "")"
+PACKAGE_BIN=""
 
-if [ -n "${PREFIX:-}" ] && [ -d "$PREFIX/bin" ]; then
-  TERMUX_BIN="$PREFIX/bin/devbuddy"
-  if [ -f "$NPM_BIN/devbuddy" ] && [ ! -f "$TERMUX_BIN" ]; then
-    ln -sf "$NPM_BIN/devbuddy" "$TERMUX_BIN"
-  fi
+if [ -d "$GLOBAL_ROOT/@thestrongestoftomorrow/devbuddy/bin" ]; then
+  PACKAGE_BIN="$GLOBAL_ROOT/@thestrongestoftomorrow/devbuddy/bin/devbuddy.js"
+elif [ -d "$GLOBAL_ROOT/devbuddy/bin" ]; then
+  PACKAGE_BIN="$GLOBAL_ROOT/devbuddy/bin/devbuddy.js"
 fi
+
+if [ -n "${PREFIX:-}" ] && [ -d "$PREFIX/bin" ] && [ -n "$PACKAGE_BIN" ] && [ -f "$PACKAGE_BIN" ]; then
+  TERMUX_BIN="$PREFIX/bin/devbuddy"
+  rm -f "$TERMUX_BIN"
+  cat << WRAPPER > "$TERMUX_BIN"
+#!/usr/bin/env sh
+exec node "$PACKAGE_BIN" "$@"
+WRAPPER
+  chmod +x "$TERMUX_BIN"
+fi
+
+hash -r 2>/dev/null || true
 
 echo ""
 echo "✓ DevBuddy CLI installed successfully!"
@@ -53,9 +66,8 @@ echo "Version: $(devbuddy --version 2>/dev/null || node -p "require("./package.j
 
 if ! command -v devbuddy >/dev/null 2>&1; then
   echo ""
-  echo "Note: 'devbuddy' is installed at $NPM_BIN/devbuddy"
-  echo "Add $NPM_BIN to your PATH or run:"
-  echo "  export PATH="$NPM_BIN:$PATH""
+  echo "Note: If 'devbuddy' is not found on PATH, run:"
+  echo "  export PATH="$(npm config get prefix)/bin:$PATH""
 fi
 
 echo "Run 'devbuddy onboard' to get started."

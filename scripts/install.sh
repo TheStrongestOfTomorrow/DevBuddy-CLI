@@ -37,7 +37,25 @@ fi
 
 rm -rf "$TMP_DIR"
 
+NPM_PREFIX="$(npm config get prefix 2>/dev/null || echo "")"
+NPM_BIN="$NPM_PREFIX/bin"
+
+if [ -n "${PREFIX:-}" ] && [ -d "$PREFIX/bin" ]; then
+  TERMUX_BIN="$PREFIX/bin/devbuddy"
+  if [ -f "$NPM_BIN/devbuddy" ] && [ ! -f "$TERMUX_BIN" ]; then
+    ln -sf "$NPM_BIN/devbuddy" "$TERMUX_BIN"
+  fi
+fi
+
 echo ""
 echo "✓ DevBuddy CLI installed successfully!"
-echo "Version: $(devbuddy --version 2>/dev/null || echo "v1.3.0")"
+echo "Version: $(devbuddy --version 2>/dev/null || node -p "require("./package.json").version" 2>/dev/null || echo "v1.3.0")"
+
+if ! command -v devbuddy >/dev/null 2>&1; then
+  echo ""
+  echo "Note: 'devbuddy' is installed at $NPM_BIN/devbuddy"
+  echo "Add $NPM_BIN to your PATH or run:"
+  echo "  export PATH="$NPM_BIN:$PATH""
+fi
+
 echo "Run 'devbuddy onboard' to get started."

@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.3.0] — 2026-09-08
+
+### Added
+
+- **Custom API Providers**: Add and configure custom API endpoints with custom Base URLs using `devbuddy auth provider add <id> --base-url <url>`.
+- **Multiple Connection Types**: Support for `openai_chat` (/chat/completions), `openai_completions` (/completions), `openai_responses` (/responses), and `anthropic_messages` (/v1/messages).
+- **Named API Key Management**: Save, name, list, select, and remove multiple API keys across providers via `devbuddy auth key add/list/select/remove`.
+- **In-Session Provider & Model Switching**: Switch providers and models dynamically during interactive chat and agent sessions with `/provider`, `/switch-provider`, `/key`, and `/model --manual <id>`.
+- **AI Context Compaction (`/compact`)**: Condense noisy conversation history into structured summaries while preserving working state and archiving raw local logs.
+- **Config Import / Export**: Backup and restore configuration files using `devbuddy config export` and `devbuddy config import`.
+- **Latency & Speed Benchmark**: Test response latency across configured providers using `devbuddy benchmark`.
+- **Experimental Guard Flags**: Added `experimentalCommandGuard` and `experimentalCustomEndpoints`.
+
+### Fixed
+
+- Improved input validation and error handling across subcommands.
+- Refined UI theme, border alignments, banners, and spinners.
+
+---
+
 All notable changes to this project will be documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),

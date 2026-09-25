@@ -1,13 +1,6 @@
 // devbuddy — minimal AI-powered dev CLI.
 // Entry point: wires up Commander, global flags, all subcommands, and the
 // non-blocking auto-update check.
-//
-// v0.3 highlights:
-//   - Multi-provider (HuggingFace, OpenAI, Anthropic, Groq, OpenRouter,
-//     Ollama, Together, Mistral, Cohere)
-//   - Onboarding gate: AI commands refuse until `devbuddy onboard` is run
-//   - Agentic harness: `devbuddy agent run "<task>"` (off by default)
-//   - Auto-update: checks GitHub on launch, prompts before installing
 
 import { Command } from "commander";
 import * as ui from "./ui.js";
@@ -36,16 +29,14 @@ import { register as registerDoctor }     from "./commands/doctor.js";
 import { register as registerHistory }    from "./commands/history.js";
 import { register as registerPhone }      from "./commands/phone.js";
 import { register as registerFeatures }   from "./commands/features.js";
+import { register as registerBenchmark }  from "./commands/benchmark.js";
 import { recordCommand }                  from "./commands/history.js";
 import { launchUnified }                  from "./commands/repl.js";
 
-// Commands that should NOT trigger the auto-update check (they're either
-// meta-commands themselves, short offline operations, or interactive REPLs
-// where an update prompt would interrupt the session).
 const SKIP_UPDATE_FOR = new Set([
   "onboard", "update", "auth", "config", "todo", "chat", "init", "help", "mcp", "remote",
-  "act-as-mcp", "commit", "review", "doctor", "history", "features", "phone",
-  undefined, // no command → launches unified REPL
+  "act-as-mcp", "commit", "review", "doctor", "history", "features", "phone", "benchmark",
+  undefined,
 ]);
 
 export function run() {
@@ -54,7 +45,7 @@ export function run() {
   program
     .name("devbuddy")
     .description(
-      "DevBuddy v1.2.5 — AI-powered dev CLI.\n\n" +
+      "DevBuddy v1.3.0 — AI-powered dev CLI.\n\n" +
       "  devbuddy                Launch unified chat + agent REPL (streaming responses).\n" +
       "  devbuddy --agent        Launch directly in agent mode.\n" +
       "  onboard                 One-time setup wizard (REQUIRED before AI commands).\n" +
@@ -75,10 +66,11 @@ export function run() {
       "  remote                  ⚠️ Experimental remote-AI (SSH / Claude Desktop).\n" +
       "  phone                   ⚠️ Experimental: AI phone control via ADB/Shizuku (Ollama only).\n" +
       "  todo                    Manage quick todos.\n" +
-      "  auth                    Manage API keys across providers.\n" +
-      "  config                  View and edit settings.\n" +
+      "  auth                    Manage API keys and custom providers across providers.\n" +
+      "  benchmark               Benchmark response latency across configured providers.\n" +
+      "  config                  View, edit, export, and import settings.\n" +
       "  update                  Check for and install updates.\n\n" +
-      "Providers: HuggingFace (free) · OpenAI · Anthropic · Groq (free) · OpenRouter · Ollama (local, no key) · Together · Mistral · Cohere\n" +
+      "Providers: HuggingFace (free) · OpenAI · Anthropic · Groq (free) · OpenRouter · Ollama · Together · Mistral · Cohere + Custom Providers\n" +
       "Project context: ./DEVBUDDY.md → ~/.devbuddy/DEVBUDDY.md\n" +
       "MCP: ~/.devbuddy/mcp.json | ./.devbuddy/mcp.json\n" +
       "Storage: ~/.devbuddy/  (config.json, chats/, todos.json, history.jsonl)"
@@ -93,7 +85,6 @@ export function run() {
     .option("--allow <dir>", "Grant access to an additional directory (agent mode). Repeatable.", (v, acc) => { (acc || []).push(v); return acc; }, [])
     .option("--phone", "Launch unified REPL with phone control enabled (experimental, requires `devbuddy phone enable`).")
     .action(async (opts) => {
-      // Default action when no subcommand given: launch unified REPL.
       await launchUnified(opts);
     });
 
@@ -104,15 +95,9 @@ export function run() {
       ui.setColorEnabled(false);
     }
 
-    // v1.2.5: `devbuddy history` never recorded anything — the recorder has
-    // existed since v1.0.0 but nothing ever called it. Record every real
-    // subcommand here (keys are masked inside recordCommand). The bare root
-    // command (unified REPL) is a long-lived interactive session — skipped.
     try {
       const action = actionCmd || cmd;
       if (action.name() !== program.name()) {
-        // Build the full command path, e.g. ["todo", "add"], by walking the
-        // action command up through .parent to the root program.
         const path = [];
         let cur = action;
         while (cur && cur.parent) {
@@ -120,9 +105,6 @@ export function run() {
           cur = cur.parent;
         }
         if (path.length > 0) {
-          // Reconstruct the args: process.argv minus every path token
-          // (removed once). Bail to [] if a token isn't found, rather than
-          // guessing wrong.
           let args = process.argv.slice(2);
           for (const token of path) {
             const i = args.indexOf(token);
@@ -136,11 +118,10 @@ export function run() {
         }
       }
     } catch {
-      // History recording must never break a command.
+      // History recording
     }
   });
 
-  // Register subcommands
   registerOnboard(program);
   registerAuth(program);
   registerAsk(program);
@@ -162,24 +143,16 @@ export function run() {
   registerHistory(program);
   registerPhone(program);
   registerFeatures(program);
+  registerBenchmark(program);
 
-  // Note: no need for "show help if no command given" — the default action
-  // on the program itself launches the unified REPL when no subcommand matches.
-
-  // Fire-and-forget auto-update check (non-blocking, but we await before exit
-  // if it returns a prompt). We do this in preAction so we know the command.
   const cmdName = process.argv[2] && !process.argv[2].startsWith("-") ? process.argv[2] : undefined;
   const cfg = loadConfig();
 
   if (!SKIP_UPDATE_FOR.has(cmdName) && (cfg.autoUpdate || "prompt") !== "off") {
-    // Run check in background; if it needs a prompt, await it before the command.
     (async () => {
       try {
         await checkForUpdates();
-      } catch {
-        // Never let updater break the actual command.
-      }
-      // The actual command runs concurrently via program.parseAsync below.
+      } catch {}
     })();
   }
 

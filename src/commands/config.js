@@ -2,6 +2,7 @@
 
 import { loadConfig, setConfigKey, getConfigKey, saveConfig } from "../store.js";
 import { PROVIDERS, PROVIDER_IDS, getActiveProviderId } from "../ai/providers.js";
+import { writeFileSync, readFileSync, existsSync } from "node:fs";
 import * as ui from "../ui.js";
 
 const KNOWN_KEYS = [
@@ -17,6 +18,8 @@ const KNOWN_KEYS = [
   ["autoUpdate",      "off | prompt | silent (default: prompt)."],
   ["experimentalRemoteAI", "true/false — enable experimental remote-AI (SSH/Claude). ⚠️"],
   ["experimentalActAsMcp", "true/false — enable experimental act-as-MCP server. ⚠️"],
+  ["experimentalCommandGuard", "true/false — enable dry-run preview command execution. ⚠️"],
+  ["experimentalCustomEndpoints", "true/false — enable custom raw endpoint overrides. ⚠️"],
   ["onboardingComplete", "true/false — whether onboarding has been completed."],
 ];
 
@@ -28,7 +31,7 @@ function maskValue(k, v) {
 }
 
 export function register(program) {
-  const cfg = program.command("config").description("View and edit persistent settings.");
+  const cfg = program.command("config").description("View, edit, export, and import persistent settings.");
 
   cfg
     .command("list")
@@ -55,13 +58,41 @@ export function register(program) {
     });
 
   cfg
+    .command("export [filepath]")
+    .description("Export current configuration to a JSON file.")
+    .action((filepath) => {
+      const target = filepath || "devbuddy-config-backup.json";
+      const c = loadConfig();
+      writeFileSync(target, JSON.stringify(c, null, 2), "utf8");
+      ui.ok(`Configuration exported to: ${target}`);
+    });
+
+  cfg
+    .command("import <filepath>")
+    .description("Import configuration from a JSON file.")
+    .action((filepath) => {
+      if (!existsSync(filepath)) {
+        ui.error(`File '${filepath}' does not exist.`);
+        process.exit(1);
+      }
+      try {
+        const raw = readFileSync(filepath, "utf8");
+        const parsed = JSON.parse(raw);
+        saveConfig(parsed);
+        ui.ok(`Configuration imported successfully from '${filepath}'.`);
+      } catch (e) {
+        ui.error(`Failed to import configuration: ${e.message}`);
+        process.exit(1);
+      }
+    });
+
+  cfg
     .command("set <key> <value>")
     .description("Set a config value. Booleans/numbers are auto-cast.")
     .action((key, value) => {
       const known = KNOWN_KEYS.find(([k]) => k === key);
       if (!known) ui.warn(`'${key}' is not a known key — setting anyway.`);
 
-      // Special-case provider switching to also validate.
       if (key === "provider") {
         if (!PROVIDERS[value]) {
           ui.error(`unknown provider '${value}'. valid: ${PROVIDER_IDS.join(", ")}`);
@@ -69,9 +100,6 @@ export function register(program) {
         }
       }
 
-      // --- Value validation (v1.2.5): enum / boolean / integer keys. ---
-      // Previously `theme=banana`, `autoUpdate=yes` or `agentMaxSteps=abc`
-      // were stored silently and broke features later. Validate up front.
       const ENUM_VALUES = {
         theme: ["dark", "light", "auto"],
         autoUpdate: ["off", "prompt", "silent"],
@@ -86,7 +114,9 @@ export function register(program) {
 
       const BOOLEAN_KEYS = [
         "stream", "agentEnabled", "agentYolo",
-        "experimentalRemoteAI", "experimentalActAsMcp", "onboardingComplete",
+        "experimentalRemoteAI", "experimentalActAsMcp",
+        "experimentalCommandGuard", "experimentalCustomEndpoints",
+        "onboardingComplete",
       ];
       if (BOOLEAN_KEYS.includes(key) && value !== "true" && value !== "false") {
         ui.error(`'${key}' is a boolean — use 'devbuddy config set ${key} true' or 'false'.`);
@@ -104,14 +134,11 @@ export function register(program) {
       const after = setConfigKey(key, value);
       ui.ok(`${key} = ${JSON.stringify(after[key])}`);
 
-      // Helpful follow-up messages
       if (key === "provider") {
         if (value === "ollama") {
           ui.muted("  switched to ollama — runs locally, no API key needed.");
         } else {
           ui.muted(`  switched to ${value}. set its key with: devbuddy auth set <key>`);
-          // v1.2.5: switching to a provider with no key used to silently
-          // break every AI command afterwards — warn right away.
           const stored = after.providers && after.providers[value] && after.providers[value].apiKey;
           const envVar = PROVIDERS[value] && PROVIDERS[value].envVar;
           const envKey = envVar ? process.env[envVar] : "";
@@ -135,6 +162,9 @@ export function register(program) {
         onboardedAt: null,
         provider: null,
         providers: {},
+        customProviders: {},
+        namedKeys: {},
+        activeKeyName: null,
         language: "en",
         translateTo: "en",
         summarizeStyle: "bullets",
@@ -147,6 +177,8 @@ export function register(program) {
         lastUpdateCheck: null,
         experimentalRemoteAI: false,
         experimentalActAsMcp: false,
+        experimentalCommandGuard: false,
+        experimentalCustomEndpoints: false,
         createdAt: new Date().toISOString(),
       });
       ui.ok("config reset. run `devbuddy onboard` to set up again.");
